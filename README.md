@@ -1,12 +1,34 @@
-# Steam 游戏页历史最低价格
+<p align="center">
+  <img src="https://aka.doubaocdn.com/s/pXZ2M0av2n" alt="Steam" width="110" height="110">
+</p>
 
-> 在 Steam 商店游戏页，直接看到这款游戏的 **历史最低价** 和 **当前最低价**，只统计 Steam 官方渠道，不和第三方站混算。
+<h1 align="center">Steam 游戏页历史最低价格</h1>
 
-![version](https://img.shields.io/badge/version-1.0.8-4c6b22)
-![license](https://img.shields.io/badge/license-MIT-blue)
-![platform](https://img.shields.io/badge/platform-Steam%20Store-1b2838)
+<p align="center">在 Steam 商店游戏页，直接看到这款游戏的<b>历史最低价</b>与<b>当前最低价</b>，只统计 Steam 官方渠道。</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/version-1.0.8-4c6b22" alt="version">
+  <img src="https://img.shields.io/badge/license-MIT-blue" alt="license">
+  <img src="https://img.shields.io/badge/platform-Steam%20Store-1b2838" alt="platform">
+</p>
+
+<p align="center">
+  <a href="https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js"><img src="https://img.shields.io/badge/点此获取脚本-raw-4c6b22?logo=steam&logoColor=white" alt="获取脚本"></a>
+  <a href="https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js"><img src="https://img.shields.io/badge/jsDelivr-镜像-blue" alt="jsDelivr"></a>
+  <a href="https://github.com/ZzicoChen/Steam-SD/blob/main/Steam-SD.js"><img src="https://img.shields.io/badge/源码-GitHub-181717?logo=github" alt="源码"></a>
+</p>
 
 ---
+
+## 快速获取
+
+| 用途 | 地址 |
+| --- | --- |
+| **直链获取（推荐）** | `https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js` |
+| **国内镜像** | `https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js` |
+| **在线查看源码** | [Steam-SD.js](./Steam-SD.js) |
+
+地址随时取最新版，内容与仓库 `main` 分支同步更新，不用改链接。
 
 ## 效果
 
