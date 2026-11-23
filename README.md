@@ -1,2 +1,106 @@
 # Steam 游戏页历史最低价格
-Steam游戏页历史最低价格
+
+> 在 Steam 商店游戏页，直接看到这款游戏的 **历史最低价** 和 **当前最低价**，只统计 Steam 官方渠道，不和第三方站混算。
+
+![version](https://img.shields.io/badge/version-1.0.8-4c6b22)
+![license](https://img.shields.io/badge/license-MIT-blue)
+![platform](https://img.shields.io/badge/platform-Steam%20Store-1b2838)
+
+---
+
+## 效果
+
+在每个「购买」区块内、价格与「添加至购物车」那一行的正上方，会多出两行小字：
+
+```text
+历史最低价是 2026/11/14 时在 Steam 中的 -15% ¥42.5
+当前最低价是在 Steam 中的 -0% ¥50
+```
+
+- 字体、颜色、绿色折扣胶囊都对齐 Steam / Augmented Steam 的原生样式（13px 灰字 + 品牌绿 `#4c6b22`）
+- 没有数据时整个区块不渲染，不留空壳，不报错弹窗
+
+## 功能
+
+- **只认可购买区块**：标题必须以「购买 / Buy / Purchase」开头才算数
+- **自动跳过干扰区块**：「下载 Demo」「请求访问权限」「免费开玩」等一律不插入
+- **捆绑包独立取价**：每个 Bundle 按自己的 `data-ds-bundleid` 单独查，不是成员游戏价格的加总
+- **地区自动识别**：读 Steam 页面自带的 `g_strCountryCode`，其次 URL 的 `?cc=`，无需手动切区
+- **三层数据源兜底**：主源挂了自动回落，不会整块消失
+- **6 小时本地缓存**：重复打开同一页面不会反复请求接口
+- **无需任何 API Key**
+
+## 安装
+
+1. 先装一个用户脚本管理器：**Tampermonkey** / **Violentmonkey**，或浏览器自带的脚本功能
+2. 新建脚本，把 [`Steam-SD.js`](./Steam-SD.js) 全文粘贴进去，保存
+3. 打开任意 Steam 游戏页（`https://store.steampowered.com/app/xxxx`），刷新即可
+
+脚本头部已固定：
+
+```js
+// @match  https://store.steampowered.com/app/*
+```
+
+所以它只会在游戏页生效，不会影响愿望单、创意工坊等页面。
+
+### 图标显示为 `{}`？
+
+用户脚本的图标**只在安装那一刻抓取并缓存**，之后只更新正文是不会重抓的。解决办法：把脚本删掉，重新安装一次即可。
+
+## 挂载位置
+
+插入点是每个购买区块内部的 `.game_purchase_action`（价格 + 按钮行）**之前**：
+
+| 区块类型 | 实际位置 |
+| --- | --- |
+| 普通游戏 | 紧贴在「购买 XXX」标题下方 |
+| 捆绑包 | 在包内容图片之后、价格行之上 |
+| 下载 Demo / 请求访问权限 | **不插入** |
+
+## 数据来源
+
+| 用途 | 接口 | 说明 |
+| --- | --- | --- |
+| 史低 + 当前价（主） | `POST https://api.augmentedsteam.com/prices/v2` | 免 Key；`shops: [61]` 锁定 Steam 官方商店；数据底层来自 IsThereAnyDeal |
+| 史低（兜底） | `GET https://api.xiaoheihe.cn/game/get_game_prices/history/v2` | 仅普通游戏区块，主源无史低时启用 |
+| 当前价（兜底） | `GET https://store.steampowered.com/api/appdetails` | 主源缺 `current` 时补位 |
+| 地区 | Steam 页面变量 `g_strCountryCode` / URL `?cc=` | 纯本地读取，不联网 |
+
+## 价格口径
+
+- **历史最低价**：该地区 Steam 商店历史上出现过的最低售价（含折扣），后面跟折扣比例与发生日期
+- **当前最低价**：该地区 Steam 商店的当前售价，`-0%` 表示正价无折扣
+- **货币随地区**：中国区 ¥、美区 $、日区 ¥ 等；JPY / IDR / KRW 不显示小数
+- **捆绑包单独计算**：按 bundle 自身的历史价，不取成员游戏的加总
+
+## 常见问题
+
+**某个区块没有显示两行字？**
+免费游戏、锁区、该地区未上架，或者这个区块的标题不是「购买」类（Demo / 试玩 / 请求访问权限会被主动排除）。
+
+**数字和 SteamDB 不一样？**
+本脚本只统计 Steam 官方渠道（`shops: 61`），不含 Fanatical、Humble 等第三方站；另外地区不同数值自然不同。
+
+**会不会请求太频繁？**
+每个页面组合 6 小时内只请求一次，且只查当前页面里出现的区块。
+
+**支持英文商店页吗？**
+支持，「购买」和 `Buy` / `Purchase` 两种标题都能识别。
+
+**支持 `/bundle/`、`/sub/` 独立页吗？**
+不支持，只在 `/app/` 游戏页生效。
+
+## 兼容性
+
+- 用户脚本管理器：Tampermonkey、Violentmonkey、支持 `GM_xmlhttpRequest` 的内置脚本功能
+- 需要放行 `@connect` 里的三个域名（`api.augmentedsteam.com`、`api.xiaoheihe.cn`、`store.steampowered.com`）
+
+## 更新日志
+
+- **v1.0.8** — 挂载位置改到每个购买区块内价格行上方；捆绑包按 bundle 独立取价；排除下载 Demo 与请求访问权限区块
+- **v1.0.1** — 名称与版本号整理
+
+## License
+
+[MIT](./LICENSE) © ZzicoChen
