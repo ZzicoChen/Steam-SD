@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://aka.doubaocdn.com/s/pXZ2M0av2n" alt="Steam" width="110" height="110">
+  <img src="./assets/steam.svg" alt="Steam" width="110" height="110">
 </p>
 
 <h1 align="center">Steam 游戏页历史最低价格</h1>
