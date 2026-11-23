@@ -1,12 +1,11 @@
 // ==UserScript==
 // @name         Steam游戏页历史最低价格
 // @namespace    https://github.com/beerleexc
-// @version      1.0.4
+// @version      1.0.8
 // @description  在 Steam 游戏商店页每个「购买」区块内显示历史最低价与当前最低价（Steam 渠道），自动跳过下载 Demo、请求访问权限等区块
 // @author       beerlee
 // @license      MIT
-// @icon         https://store.steampowered.com/favicon.ico
-// @icon         https://upload.wikimedia.org/wikipedia/commons/8/83/Steam_icon_logo.svg
+// @icon         https://aka.doubaocdn.com/s/pXZ2M0av2n
 // @match        https://store.steampowered.com/app/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
