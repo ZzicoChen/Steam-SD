@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Steam游戏历史最低价格
 // @namespace    https://github.com/beerleexc
-// @version      1.1.8
+// @version      1.1.9
 // @description  在 Steam 游戏商店页每个「购买」区块内、愿望单列表每一行，显示历史最低价与当前最低价（Steam 渠道），自动跳过下载 Demo、请求访问权限等区块
 // @author       beerlee
 // @license      MIT
@@ -240,6 +240,7 @@ font-family:"Motiva Sans",Arial,sans-serif}
 .shc-low-info .shc-price{color:#ffffff}
 .shc-low-info .shc-cut{display:inline-block;background:#4c6b22;color:#c9f22f;font-weight:700;
 padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
+.shc-low-info .shc-none{color:#8f98a0;font-weight:400}
 .shc-wl-info{display:block;flex:0 0 auto;margin:0 12px 0 0;text-align:left;
 font-size:13.5px;line-height:1.7;letter-spacing:0.2px;color:#aebbc7;font-weight:700;white-space:nowrap;
 font-family:"Motiva Sans",Arial,sans-serif}
@@ -248,6 +249,7 @@ font-family:"Motiva Sans",Arial,sans-serif}
 .shc-wl-info .shc-wl-price{color:#ffffff;font-weight:400}
 .shc-wl-info .shc-wl-cut{display:inline-block;background:#4c6b22;color:#c9f22f;font-weight:700;
 padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
+.shc-wl-info .shc-wl-none{color:#8f98a0;font-weight:400}
 `;
 
     function makeRow(label, date, cut, priceText) {
@@ -266,8 +268,22 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
         }
         add("shc-shop", "Steam");
         add("shc-label", " 中的 ");
-        add("shc-cut", "-" + cut + "%");
+        if (cut > 0) add("shc-cut", "-" + cut + "%");   // 没折扣就不画胶囊，避免出现「-0%」
         add("shc-price", " " + priceText);
+        return row;
+    }
+
+    /* 没有数据的那一行也给个占位，保证「历史最低价 / 当前最低价」两行始终都在 */
+    function makeEmptyRow(label) {
+        const row = document.createElement("div");
+        row.className = "shc-row";
+        const a = document.createElement("span");
+        a.className = "shc-label";
+        a.textContent = label;
+        const b = document.createElement("span");
+        b.className = "shc-none";
+        b.textContent = "暂无记录";
+        row.append(a, b);
         return row;
     }
 
@@ -308,10 +324,14 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
         if (data.low) {
             box.appendChild(makeRow("历史最低价是 ", data.low.date, data.low.cut,
                 formatPrice(data.low.amount, data.low.currency)));
+        } else {
+            box.appendChild(makeEmptyRow("历史最低价是 "));
         }
         if (data.current) {
             box.appendChild(makeRow("当前最低价是在 ", "", data.current.cut,
                 formatPrice(data.current.amount, data.current.currency)));
+        } else {
+            box.appendChild(makeEmptyRow("当前最低价是在 "));
         }
 
         // 位置：该区块内 .game_purchase_action（价格+按钮行）之前
@@ -481,12 +501,24 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
             line.appendChild(textSpan("shc-wl-price", formatPrice(data.low.amount, data.low.currency)));
             if (data.low.cut > 0) line.appendChild(textSpan("shc-wl-cut", "-" + data.low.cut + "%"));
             box.appendChild(line);
+        } else {
+            const line = document.createElement("span");
+            line.className = "shc-wl-row";
+            line.appendChild(textSpan("shc-wl-label", "史低: "));
+            line.appendChild(textSpan("shc-wl-none", "暂无记录"));
+            box.appendChild(line);
         }
         if (data.current) {
             const line = document.createElement("span");
             line.className = "shc-wl-row";
             line.appendChild(textSpan("shc-wl-label", "当前: "));
             line.appendChild(textSpan("shc-wl-price", formatPrice(data.current.amount, data.current.currency)));
+            box.appendChild(line);
+        } else {
+            const line = document.createElement("span");
+            line.className = "shc-wl-row";
+            line.appendChild(textSpan("shc-wl-label", "当前: "));
+            line.appendChild(textSpan("shc-wl-none", "暂无记录"));
             box.appendChild(line);
         }
 
@@ -581,7 +613,7 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
     /* 用户脚本头部只能写一条 @updateURL，写多行也只有一条生效。
        走 ghfast 加速直取 raw：不缓存，拉到的永远是 main 最新内容；
        jsDelivr 的 @main 有 12 小时缓存，实测 purge 后仍会返回旧版，所以只当最后的兜底。 */
-    const SELF_VERSION = (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "1.1.8";
+    const SELF_VERSION = (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "1.1.9";
     const UPDATE_MIRRORS = [
         "https://ghfast.top/https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js",  // 主更新地址：加速直取 raw，不缓存
         "https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js",   // 原地址：GitHub raw 源头
