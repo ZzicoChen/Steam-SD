@@ -1,14 +1,15 @@
 // ==UserScript==
-// @name         Steam游戏页历史最低价格
+// @name         Steam游戏历史最低价格
 // @namespace    https://github.com/beerleexc
-// @version      1.0.8
-// @description  在 Steam 游戏商店页每个「购买」区块内显示历史最低价与当前最低价（Steam 渠道），自动跳过下载 Demo、请求访问权限等区块
+// @version      1.0.9
+// @description  在 Steam 游戏商店页每个「购买」区块内、愿望单列表每一行，显示历史最低价与当前最低价（Steam 渠道），自动跳过下载 Demo、请求访问权限等区块
 // @author       beerlee
 // @license      MIT
 // @updateURL    https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js
 // @downloadURL  https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js
 // @icon         data:image/png;base64,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
 // @match        https://store.steampowered.com/app/*
+// @match        https://store.steampowered.com/wishlist/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -25,8 +26,7 @@
     document.documentElement.dataset.shcLowActive = "1";
 
     const APP_MATCH = location.pathname.match(/\/app\/(\d+)/);
-    if (!APP_MATCH) return;
-    const APPID = Number(APP_MATCH[1]);
+    const APPID = APP_MATCH ? Number(APP_MATCH[1]) : 0;
 
     /* 地区：优先 Steam 页面自带的国家代码，其次 URL 的 cc 参数，最后中国区 */
     function detectCountry() {
@@ -220,11 +220,17 @@
     /* ---------------- UI：贴在每个购买区块内、价格行正上方 ---------------- */
     const CSS = `
 .shc-low-info{margin:2px 0 6px;font-size:13px;line-height:1.7;color:#8f98a0;
-font-family:"Motiva Sans",Arial,Helvetica,sans-serif}
+font-family:"Motiva Sans",Arial,sans-serif}
 .shc-low-info .shc-row{display:block;white-space:nowrap}
 .shc-low-info .shc-date,.shc-low-info .shc-shop,.shc-low-info .shc-price{color:#c6d4df}
 .shc-low-info .shc-cut{display:inline-block;background:#4c6b22;color:#beee11;
 padding:0 4px;margin:0 2px;border-radius:2px;font-size:12px;line-height:1.55}
+.shc-wl-info{display:inline-block;vertical-align:middle;margin:0 14px 2px 0;text-align:right;
+font-size:12px;line-height:1.5;color:#8f98a0;white-space:nowrap;
+font-family:"Motiva Sans",Arial,sans-serif}
+.shc-wl-info .shc-wl-row{display:block}
+.shc-wl-info .shc-wl-price{color:#c6d4df}
+.shc-wl-info .shc-wl-cut{color:#a4d007}
 `;
 
     function makeRow(label, date, cut, priceText) {
@@ -326,4 +332,156 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12px;line-height:1.55}
             clearInterval(startTimer);
         }
     }, 250);
+
+    /* ================= 愿望单页 ================= */
+    const WL_CHUNK = 50;
+
+    function wishlistRows() {
+        return [ ...document.querySelectorAll(".wishlist_row") ];
+    }
+
+    function wishlistRowAppId(row) {
+        let id = Number(row.getAttribute("data-app-id") || row.getAttribute("data-ds-appid"));
+        if (!id) {
+            const a = row.querySelector('a[href*="/app/"]');
+            const m = a && String(a.getAttribute("href") || "").match(/\/app\/(\d+)/);
+            if (m) id = Number(m[1]);
+        }
+        return id;
+    }
+
+    function textSpan(cls, text) {
+        const span = document.createElement("span");
+        if (cls) span.className = cls;
+        span.textContent = text;
+        return span;
+    }
+
+    async function fetchWishlistData(appIds) {
+        const cacheKey = `shcWlLow:v3:${CC}:${appIds.slice().sort().join("|")}`;
+        const cached = cacheGet(cacheKey);
+        if (cached) return cached;
+
+        const out = {};
+        for (let i = 0; i < appIds.length; i += WL_CHUNK) {
+            const chunk = appIds.slice(i, i + WL_CHUNK);
+            const prices = await fetchAugmented(CC, chunk, []).catch(() => null);
+            if (!prices) continue;
+            chunk.forEach(id => {
+                const entry = prices["app/" + id];
+                if (entry) out[id] = { low: pickLow(entry), current: pickCurrent(entry) };
+            });
+        }
+
+        // 缺失项兜底：小黑盒史低 / Steam 官方当前价（限并发，避免一次打太多请求）
+        const queue = appIds.filter(id => !out[id] || (!out[id].low && !out[id].current));
+        const worker = async () => {
+            while (queue.length) {
+                const id = queue.shift();
+                const item = out[id] || (out[id] = { low: null, current: null });
+                if (!item.low) {
+                    const low = await fetchXiaoheiheLow(id, CC).catch(() => null);
+                    if (low) item.low = low;
+                }
+                if (!item.current) {
+                    const cur = await fetchSteamCurrent(id, CC).catch(() => null);
+                    if (cur) item.current = cur;
+                }
+            }
+        };
+        await Promise.all([ worker(), worker(), worker() ]);
+
+        cacheSet(cacheKey, out);
+        return out;
+    }
+
+    function paintWishlistRow(row, data) {
+        if (!data || (!data.low && !data.current)) return;
+        if (!row.isConnected) return;
+
+        let box = row.querySelector(".shc-wl-info");
+        if (!box) {
+            box = document.createElement("div");
+            box.className = "shc-wl-info";
+        }
+        box.textContent = "";
+
+        if (data.low) {
+            const line = document.createElement("span");
+            line.className = "shc-wl-row";
+            line.appendChild(textSpan("", "史低: "));
+            line.appendChild(textSpan("shc-wl-price", formatPrice(data.low.amount, data.low.currency)));
+            if (data.low.cut > 0) line.appendChild(textSpan("shc-wl-cut", " -" + data.low.cut + "%"));
+            box.appendChild(line);
+        }
+        if (data.current) {
+            const line = document.createElement("span");
+            line.className = "shc-wl-row";
+            line.appendChild(textSpan("", "当前: "));
+            line.appendChild(textSpan("shc-wl-price", formatPrice(data.current.amount, data.current.currency)));
+            box.appendChild(line);
+        }
+
+        if (!box.isConnected) {
+            const anchor = row.querySelector(".discount_block, .btn_addtocart, .wishlist_add_to_cart, form");
+            if (anchor && anchor.parentElement) anchor.parentElement.insertBefore(box, anchor);
+            else (row.querySelector(".wl_right") || row).appendChild(box);
+        }
+    }
+
+    let wlRunning = false;
+    let wlPending = false;
+
+    async function refreshWishlist() {
+        if (wlRunning) {
+            wlPending = true;
+            return;
+        }
+        wlRunning = true;
+        try {
+            ensureStyle();
+            const rows = wishlistRows();
+            if (!rows.length) return;
+            const ids = [ ...new Set(rows.map(wishlistRowAppId).filter(Boolean)) ];
+            if (!ids.length) return;
+            const data = await fetchWishlistData(ids);
+            rows.forEach(row => {
+                const id = wishlistRowAppId(row);
+                if (id) paintWishlistRow(row, data[id]);
+            });
+        } finally {
+            wlRunning = false;
+            if (wlPending) {
+                wlPending = false;
+                refreshWishlist();
+            }
+        }
+    }
+
+    function startWishlistPage() {
+        let wlTries = 0;
+        const wlTimer = setInterval(() => {
+            if (wishlistRows().length) {
+                clearInterval(wlTimer);
+                refreshWishlist();
+                // 翻页 / 懒加载出现新行时补挂
+                let debounceId = null;
+                const observer = new MutationObserver(mutations => {
+                    const relevant = mutations.some(m => [ ...m.addedNodes, ...m.removedNodes ]
+                        .some(n => n.nodeType === 1 && n.classList && n.classList.contains("wishlist_row")));
+                    if (!relevant) return;
+                    clearTimeout(debounceId);
+                    debounceId = setTimeout(refreshWishlist, 400);
+                });
+                observer.observe(document.body, { childList: true, subtree: true });
+            } else if (++wlTries > 40) {
+                clearInterval(wlTimer);
+            }
+        }, 250);
+    }
+
+    /* ================= 入口分发 ================= */
+    if (!APP_MATCH && /^\/wishlist/i.test(location.pathname)) {
+        startWishlistPage();
+    }
 })();
