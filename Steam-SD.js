@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Steam游戏历史最低价格
 // @namespace    https://github.com/beerleexc
-// @version      1.1.0
+// @version      1.1.1
 // @description  在 Steam 游戏商店页每个「购买」区块内、愿望单列表每一行，显示历史最低价与当前最低价（Steam 渠道），自动跳过下载 Demo、请求访问权限等区块
 // @author       beerlee
 // @license      MIT
@@ -16,9 +16,13 @@
 // @connect      api.augmentedsteam.com
 // @connect      api.xiaoheihe.cn
 // @connect      store.steampowered.com
+// @connect      cdn.jsdelivr.net
+// @connect      raw.githubusercontent.com
+// @connect      ghfast.top
 // @run-at       document-end
 // ==/UserScript==
-// 备用直链（GitHub raw，国内可能无法访问）：https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js
+// 备用直链（GitHub raw 原地址，国内可能无法访问）：https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js
+// 备用镜像（第三方加速，国内可用）：https://ghfast.top/https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js
 // 原 @icon 图床链接备份：https://aka.doubaocdn.com/s/pXZ2M0av2n
 
 (function () {
@@ -520,8 +524,75 @@ font-family:"Motiva Sans",Arial,sans-serif}
         }, 250);
     }
 
+    /* ================= 自动更新兜底 ================= */
+    /* 用户脚本头部只能写一条 @updateURL，写多行也只有一条生效。
+       这里额外主动核对多个镜像，谁先返回新版本就提示谁，避免镜像缓存或域名不可达时一直收不到更新。 */
+    const SELF_VERSION = (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "1.1.1";
+    const UPDATE_MIRRORS = [
+        "https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js",   // 元数据里的主更新地址
+        "https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js",  // GitHub 原地址
+        "https://ghfast.top/https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js"  // 国内加速兜底
+    ];
+
+    function compareVersion(a, b) {   // a 比 b 新返回 1，旧返回 -1，同版本 0
+        const pa = String(a || "0").split(".").map(Number);
+        const pb = String(b || "0").split(".").map(Number);
+        for (let i = 0; i < 3; i++) {
+            const x = pa[i] || 0, y = pb[i] || 0;
+            if (x !== y) return x > y ? 1 : -1;
+        }
+        return 0;
+    }
+
+    function showUpdateTip(version, url) {
+        if (document.getElementById("shc-update-tip")) return;
+        const box = document.createElement("div");
+        box.id = "shc-update-tip";
+        box.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:99999;background:#1b2838;" +
+            "color:#c6d4df;border:1px solid #4c6b22;border-radius:4px;padding:10px 14px;" +
+            "font-size:13px;line-height:1.6;box-shadow:0 4px 16px rgba(0,0,0,.5);font-family:inherit";
+        const text = document.createElement("span");
+        text.textContent = `脚本有新版本 v${version}，`;
+        const link = document.createElement("a");
+        link.href = url;
+        link.target = "_blank";
+        link.textContent = "点此安装";
+        link.style.cssText = "color:#a4d007;text-decoration:none";
+        const close = document.createElement("span");
+        close.textContent = "✕";
+        close.style.cssText = "margin-left:12px;cursor:pointer;color:#8f98a0";
+        close.onclick = () => box.remove();
+        box.append(text, link, close);
+        document.body.appendChild(box);
+    }
+
+    async function checkSelfUpdate() {
+        try {
+            const key = "shcSelfUpdateCheckAt";
+            const last = Number(GM_getValue(key, 0)) || 0;
+            if (Date.now() - last < 6 * 60 * 60 * 1e3) return;   // 6 小时内只核对一次
+            GM_setValue(key, Date.now());
+        } catch { return; }
+
+        for (const url of UPDATE_MIRRORS) {
+            try {
+                const text = await request({
+                    url: url + (url.includes("?") ? "&" : "?") + "_=" + Date.now(),
+                    timeout: 12000
+                });
+                const m = String(text).match(/@version\s+([\d.]+)/);
+                if (!m) continue;
+                if (compareVersion(m[1], SELF_VERSION) > 0) {
+                    showUpdateTip(m[1], url);
+                    return;   // 已提示，不再继续试后面的镜像
+                }
+            } catch { /* 这个镜像不通，换下一个 */ }
+        }
+    }
+
     /* ================= 入口分发 ================= */
     if (!APP_MATCH && /^\/wishlist/i.test(location.pathname)) {
         startWishlistPage();
     }
+    checkSelfUpdate();
 })();
