@@ -7,14 +7,15 @@
 <p align="center">在 Steam 商店游戏页、愿望单列表，直接看到每款游戏的<b>历史最低价</b>与<b>当前最低价</b>，只统计 Steam 官方渠道。</p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.1.0-4c6b22" alt="version">
+  <img src="https://img.shields.io/badge/version-1.1.1-4c6b22" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="license">
   <img src="https://img.shields.io/badge/platform-Steam%20Store-1b2838" alt="platform">
 </p>
 
 <p align="center">
-  <a href="https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js"><img src="https://img.shields.io/badge/点此获取脚本-jsDelivr-4c6b22?logo=steam&logoColor=white" alt="获取脚本"></a>
-  <a href="https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js"><img src="https://img.shields.io/badge/raw-备用镜像-blue" alt="raw"></a>
+  <a href="https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js"><img src="https://img.shields.io/badge/原地址-raw-4c6b22?logo=github&logoColor=white" alt="raw"></a>
+  <a href="https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js"><img src="https://img.shields.io/badge/镜像-jsDelivr-blue" alt="jsDelivr"></a>
+  <a href="https://ghfast.top/https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js"><img src="https://img.shields.io/badge/国内加速-ghfast-9cf" alt="ghfast"></a>
   <a href="https://github.com/ZzicoChen/Steam-SD/blob/main/Steam-SD.js"><img src="https://img.shields.io/badge/源码-GitHub-181717?logo=github" alt="源码"></a>
 </p>
 
@@ -24,12 +25,12 @@
 
 | 用途 | 地址 |
 | --- | --- |
-| **国内镜像（推荐）** | `https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js` |
-| **GitHub raw（备用）** | `https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js` |
+| **原地址（GitHub raw）** | `https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js` |
+| **镜像（jsDelivr，国内推荐）** | `https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js` |
+| **国内加速（第三方兜底）** | `https://ghfast.top/https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js` |
 | **在线查看源码** | [Steam-SD.js](./Steam-SD.js) |
 
-地址随时取最新版，内容与仓库 `main` 分支同步更新，不用改链接。
-国内网络下 `raw.githubusercontent.com` 经常连不上，安装与自动更新请优先用 jsDelivr 地址。
+三个地址内容一致、随时取最新版，不同网络环境下哪个能用就用哪个。
 
 ## 效果
 
@@ -67,29 +68,41 @@
 - **6 小时本地缓存**：重复打开同一页面不会反复请求接口
 - **愿望单批量查询**：一次请求查完当前页全部 appid（每 50 个一组），只对缺数据项并发补查
 - **适配新版愿望单 DOM**：按 `div.Panel[data-index]` 行 + `gridArea=purchase` 价格格定位，类名改版也不会失效
+- **多镜像自更新兜底**：用户脚本只能写一条 `@updateURL`，脚本自己每 6 小时核对 jsDelivr / raw / ghfast 三个地址，发现新版就在右下角提示安装
 - **无需任何 API Key**
 
 ## 安装
 
 1. 先装一个用户脚本管理器：**Tampermonkey** / **Violentmonkey**，或浏览器自带的脚本功能
-2. 新建脚本，把 [`Steam-SD.js`](./Steam-SD.js) 全文粘贴进去，保存（或直接点击上方 **jsDelivr** 按钮一键安装）
+2. 新建脚本，把 [`Steam-SD.js`](./Steam-SD.js) 全文粘贴进去，保存（或点上方任一地址一键安装）
 3. 打开任意 Steam 游戏页（`https://store.steampowered.com/app/xxxx`）或愿望单页，刷新即可
 
-脚本头部已固定：
+脚本头部固定如下：
 
 ```js
 // @updateURL    https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js
 // @downloadURL  https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js
 // @match        https://store.steampowered.com/app/*
 // @match        https://store.steampowered.com/wishlist/*
+// @connect      api.augmentedsteam.com
+// @connect      api.xiaoheihe.cn
+// @connect      store.steampowered.com
+// @connect      cdn.jsdelivr.net
+// @connect      raw.githubusercontent.com
+// @connect      ghfast.top
 ```
 
-安装后就支持自动更新；脚本不会影响创意工坊、社区市场等其他页面。
+### 更新地址能不能写多条？
+
+不能。用户脚本规范里 `@updateURL` / `@downloadURL` 都只能生效一条，写多行也只有一条被读取。所以本脚本的做法是：
+
+1. 头部元数据用 jsDelivr（国内可访问）做官方更新地址
+2. 脚本内部自己再核对三个镜像（jsDelivr → raw 原地址 → ghfast 加速），谁先返回更高的 `@version` 就在页面右下角弹出「脚本有新版本 vX，点此安装」
 
 ### 自动更新失败 / 更新后还是旧版？
 
-- **提示「更新失败」**：基本是国内的 raw.githubusercontent.com 域名访问不通导致的；v1.0.9 起已把 `@updateURL` 换成 jsDelivr 镜像，新版不再受此影响。旧安装（之前版本没有这个更新地址）需要**重装一次**。
-- **刚发新版，检查更新却还是旧版**：jsDelivr 对分支（`@main`）有缓存，一般几小时到最长 12 小时才会刷新；想立刻拿新版就用 raw 地址或直接重装。
+- **提示「更新失败」**：基本是国内的 raw.githubusercontent.com 域名访问不通，v1.0.9 起已换成 jsDelivr 镜像。旧安装需要**重装一次**。
+- **刚发新版，检查更新却还是旧版**：jsDelivr 对分支（`@main`）有缓存，一般几小时、最长 12 小时才会刷新；想立刻拿新版就用 raw 或 ghfast 地址重装。
 
 ### 图标显示为 `{}`？
 
@@ -145,7 +158,7 @@
 本脚本只统计 Steam 官方渠道（`shops: 61`），不含 Fanatical、Humble 等第三方站；另外地区不同数值自然不同。
 
 **会不会请求太频繁？**
-每个页面组合 6 小时内只请求一次；愿望单一次查完当前页（每 50 个 appid 一组），仅对缺数据项并发补查（限 3 并发）。
+每个页面组合 6 小时内只请求一次；愿望单一次查完当前页（每 50 个 appid 一组），仅对缺数据项并发补查（限 3 并发）。更新核对也是 6 小时一次。
 
 **支持英文商店页吗？**
 支持，「购买」和 `Buy` / `Purchase` 两种标题都能识别。
@@ -156,9 +169,15 @@
 ## 兼容性
 
 - 用户脚本管理器：Tampermonkey、Violentmonkey、支持 `GM_xmlhttpRequest` 的内置脚本功能
-- 需要放行 `@connect` 里的三个域名（`api.augmentedsteam.com`、`api.xiaoheihe.cn`、`store.steampowered.com`）
+- 需要放行 `@connect` 里的六个域名（`api.augmentedsteam.com`、`api.xiaoheihe.cn`、`store.steampowered.com`、`cdn.jsdelivr.net`、`raw.githubusercontent.com`、`ghfast.top`）
 
 ## 更新日志
+
+### v1.1.1
+
+- **新增：多镜像自动更新核对** — 脚本内每 6 小时依次核对 jsDelivr / GitHub raw / ghfast 三个地址的 `@version`，发现更高版本就在页面右下角提示「点此安装」，避免某个镜像缓存滞后或域名不通时一直收不到更新
+- **新增**：`@connect` 放行 `cdn.jsdelivr.net`、`raw.githubusercontent.com`、`ghfast.top`
+- **文档**：头部保留 raw 原地址与加速镜像注释，README 的「快速获取」同时列出原地址、jsDelivr 镜像、ghfast 加速三个入口
 
 ### v1.1.0
 
