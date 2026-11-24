@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Steam游戏历史最低价格
 // @namespace    https://github.com/beerleexc
-// @version      1.2.1
+// @version      1.3.0
 // @description  在 Steam 游戏商店页每个「购买」区块内、愿望单列表每一行，显示历史最低价与当前最低价（Steam 渠道），自动跳过下载 Demo、请求访问权限等区块
 // @author       beerlee
 // @license      MIT
@@ -63,14 +63,20 @@
     }
 
     /* ---------------- 请求层 ---------------- */
+    let reqCount = 0;   // 诊断用：本页发起了多少次接口请求（可在控制台看 html[data-shc-req]）
+    function bumpReq() {
+        reqCount++;
+        document.documentElement.dataset.shcReq = String(reqCount);
+    }
     function request(opts) {
         return new Promise((resolve, reject) => {
+            bumpReq();
             GM_xmlhttpRequest({
                 method: opts.method || "GET",
                 url: opts.url,
                 headers: opts.headers || {},
                 data: opts.data === undefined ? undefined : JSON.stringify(opts.data),
-                timeout: opts.timeout || 15000,
+                timeout: opts.timeout || 8000,
                 onload: r => r.status >= 200 && r.status < 400
                     ? resolve(r.responseText)
                     : reject(Object.assign(new Error("HTTP " + r.status), { status: r.status })),
@@ -178,20 +184,31 @@
     }
 
     /* ---------------- 取数（含 6 小时缓存） ---------------- */
+    /* 缓存版本号必须与写入一致，否则读永远不命中（旧版 bug：写 v4、读 v3 → 每次刷新都重新请求） */
     const CACHE_TTL = 6 * 60 * 60 * 1e3;
+    const CACHE_VER = 4;
     function cacheGet(key) {
         try {
             const hit = GM_getValue(key, null);
-            if (hit && hit.v === 3 && Date.now() - hit.t < CACHE_TTL) return hit.data;
+            if (hit && hit.v === CACHE_VER && Date.now() - hit.t < CACHE_TTL) return hit.data;
         } catch { /* ignore */ }
         return null;
     }
     function cacheSet(key, data) {
-        try { GM_setValue(key, { v: 4, t: Date.now(), data: data }); } catch { /* ignore */ }
+        try { GM_setValue(key, { v: CACHE_VER, t: Date.now(), data: data }); } catch { /* ignore */ }
+    }
+
+    const cacheKeyOf = targets => `shcAppLow:v4:${CC}:${targets.map(t => t.key).sort().join("|")}`;
+
+    /* 已有缓存时同步返回，页面立刻就能画出来，不必等网络 */
+    function cachedData(targets) {
+        const key = cacheKeyOf(targets);
+        const cached = cacheGet(key);
+        return cached ? { key: key, data: cached } : null;
     }
 
     async function buildData(targets) {
-        const cacheKey = `shcAppLow:v4:${CC}:${targets.map(t => t.key).sort().join("|")}`;
+        const cacheKey = cacheKeyOf(targets);
         const cached = cacheGet(cacheKey);
         if (cached) return cached;
 
@@ -205,25 +222,24 @@
             out[t.key] = { low: pickLow(entry), current: pickCurrent(entry) };
         });
 
-        // app 区块兜底：小黑盒史低 / Steam 官方当前价
-        for (const t of targets) {
-            if (t.kind !== "app") continue;
-            if (!out[t.key].low) {
-                const low = await fetchXiaoheiheLow(t.id, CC).catch(() => null);
-                if (low) out[t.key].low = low;
-            }
-            if (!out[t.key].current) {
-                const cur = await fetchSteamCurrent(t.id, CC).catch(() => null);
-                if (cur) out[t.key].current = cur;
-            }
-        }
+        /* 兜底全部并发：小黑盒史低 + Steam 官方现价同时发，不再一个接一个等 */
+        await Promise.all(targets.filter(t => t.kind === "app").map(async t => {
+            const item = out[t.key];
+            const [low, cur] = await Promise.all([
+                item.low ? null : fetchXiaoheiheLow(t.id, CC).catch(() => null),
+                item.current ? null : fetchSteamCurrent(t.id, CC).catch(() => null)
+            ]);
+            if (low) item.low = low;
+            if (cur) item.current = cur;
+        }));
 
-        // 所有区块兜底：接口缺「当前价」时读页面自身价格，确保两行都显示
-        for (const t of targets) {
-            if (out[t.key].current) continue;
+        // 最后兜底：接口缺「当前价」时读页面自身价格（同步、零请求）
+        targets.forEach(t => {
+            const item = out[t.key];
+            if (item.current) return;
             const cur = parseCurrentFromBlock(t.block);
-            if (cur) out[t.key].current = cur;
-        }
+            if (cur) item.current = cur;
+        });
 
         cacheSet(cacheKey, out);
         return out;
@@ -325,6 +341,11 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
             box = document.createElement("div");
             box.className = "shc-low-info";
         }
+
+        /* 内容没变就不重画：避免自己改 DOM → 触发 observer → 再重画 → 死循环重排 */
+        const sig = JSON.stringify(data);
+        if (box.dataset.sig === sig && box.isConnected) return;
+        box.dataset.sig = sig;
         box.textContent = "";
 
         if (data.low) {
@@ -349,6 +370,14 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
             if (action) action.insertAdjacentElement("beforebegin", box);
             else target.block.appendChild(box);
         }
+        markPaint();
+    }
+
+    let firstPaintAt = 0;   // 诊断用：第一次把价格画到页面上的时刻（ms）
+    function markPaint() {
+        if (firstPaintAt) return;
+        firstPaintAt = Math.round(performance.now());
+        document.documentElement.dataset.shcMs = String(firstPaintAt);
     }
 
     function ensureStyle() {
@@ -373,6 +402,21 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
             ensureStyle();
             const targets = collectTargets();
             if (!targets.length) return;
+
+            /* 命中缓存 → 直接画，不发任何请求 */
+            const hit = cachedData(targets);
+            if (hit) {
+                targets.forEach(t => paintTarget(t, hit.data[t.key]));
+                return;
+            }
+
+            /* 未命中 → 先用页面自身的价格立刻画出两行，网络回来后补齐史低 */
+            const quick = {};
+            targets.forEach(t => {
+                quick[t.key] = { low: null, current: parseCurrentFromBlock(t.block) };
+            });
+            targets.forEach(t => paintTarget(t, quick[t.key]));
+
             const data = await buildData(targets);
             targets.forEach(t => paintTarget(t, data[t.key]));
         } finally {
@@ -384,23 +428,32 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
         }
     }
 
-    let tries = 0;
-    const startTimer = setInterval(() => {
+    /* 立刻试一次，没挂上再每 120ms 试（原来固定等 250ms 才第一次动） */
+    function bootGamePage() {
         const host = document.querySelector("#game_area_purchase");
-        if (host) {
-            clearInterval(startTimer);
-            refresh();
-            // 捆绑包展开/隐藏、区块动态出现时补挂
-            let timerId = null;
-            const observer = new MutationObserver(() => {
-                clearTimeout(timerId);
-                timerId = setTimeout(refresh, 300);
+        if (!host) return false;
+        refresh();
+        /* 捆绑包展开/收起等真实结构变化时才重跑；脚本自己的插入不算 */
+        let timerId = null;
+        const observer = new MutationObserver(muts => {
+            const foreign = muts.some(m => {
+                const el = m.target.nodeType === 1 ? m.target : m.target.parentElement;
+                return !(el && el.closest && el.closest(".shc-low-info"));
             });
-            observer.observe(host, { childList: true });
-        } else if (++tries > 20) {
-            clearInterval(startTimer);
-        }
-    }, 250);
+            if (!foreign) return;
+            clearTimeout(timerId);
+            timerId = setTimeout(refresh, 400);
+        });
+        observer.observe(host, { childList: true });
+        return true;
+    }
+
+    if (!bootGamePage()) {
+        let tries = 0;
+        const startTimer = setInterval(() => {
+            if (bootGamePage() || ++tries > 40) clearInterval(startTimer);
+        }, 120);
+    }
 
     /* ================= 愿望单页 ================= */
     const WL_CHUNK = 50;
@@ -450,8 +503,22 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
         return span;
     }
 
-    async function fetchWishlistData(appIds) {
-        const cacheKey = `shcWlLow:v3:${CC}:${appIds.slice().sort().join("|")}`;
+    /* 愿望单行内价格直接读 DOM（不打请求），只把拿不到的部分交给接口 */
+    function wishlistRowPrice(row) {
+        const cell = wishlistPriceCell(row);
+        const scope = cell || row;
+        const text = String(scope.innerText || scope.textContent || "");
+        const m = text.match(/(HK\$|NT\$|R\$|¥|￥|\$|€|£|₽|₩|₹)\s*([\d][\d.,]*)/);
+        if (!m) return null;
+        const numText = /,\d{2}$/.test(m[2]) ? m[2].replace(".", "").replace(",", ".") : m[2].replace(/,/g, "");
+        const amount = Number(numText);
+        if (!(amount > 0)) return null;
+        const pct = text.match(/(\d+)\s*%/);
+        return { amount: amount, currency: SYM_TO_CUR[m[1]] || "CNY", cut: pct ? Number(pct[1]) : 0 };
+    }
+
+    async function fetchWishlistData(appIds, seed) {
+        const cacheKey = `shcWlLow:v4:${CC}:${appIds.slice().sort().join("|")}`;
         const cached = cacheGet(cacheKey);
         if (cached) return cached;
 
@@ -466,23 +533,27 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
             });
         }
 
-        // 缺失项兜底：小黑盒史低 / Steam 官方当前价（限并发，避免一次打太多请求）
-        const queue = appIds.filter(id => !out[id] || (!out[id].low && !out[id].current));
+        /* 页面能读到的现价先顶上，剩下的才发请求；史低才用小黑盒，并发 8 路 */
+        const queue = [];
+        appIds.forEach(id => {
+            const item = out[id] || (out[id] = { low: null, current: null });
+            if (!item.current && seed[id]) item.current = seed[id];
+            if (!item.low) queue.push(id);
+        });
+
         const worker = async () => {
             while (queue.length) {
                 const id = queue.shift();
-                const item = out[id] || (out[id] = { low: null, current: null });
-                if (!item.low) {
-                    const low = await fetchXiaoheiheLow(id, CC).catch(() => null);
-                    if (low) item.low = low;
-                }
+                const item = out[id];
                 if (!item.current) {
                     const cur = await fetchSteamCurrent(id, CC).catch(() => null);
                     if (cur) item.current = cur;
                 }
+                const low = await fetchXiaoheiheLow(id, CC).catch(() => null);
+                if (low) item.low = low;
             }
         };
-        await Promise.all([ worker(), worker(), worker() ]);
+        await Promise.all([worker(), worker(), worker(), worker(), worker(), worker(), worker(), worker()]);
 
         cacheSet(cacheKey, out);
         return out;
@@ -501,6 +572,9 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
             box = document.createElement("div");
             box.className = "shc-wl-info";
         }
+        const sig = JSON.stringify(data);
+        if (box.dataset.sig === sig && box.isConnected && box.parentElement) return;
+        box.dataset.sig = sig;
         box.textContent = "";
 
         if (data.low) {
@@ -540,6 +614,7 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
         }
 
         /* 新版：插进价格格里那条「价格 + 购物车」横排的最前面，与价格同一行、整体靠左 */
+        markPaint();
         const cell = wishlistPriceCell(row);
         if (cell) {
             const line = wishlistPriceLine(cell, box);
@@ -580,11 +655,27 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
             if (!rows.length) return;
             const ids = [ ...new Set(rows.map(wishlistRowAppId).filter(Boolean)) ];
             if (!ids.length) return;
-            const data = await fetchWishlistData(ids);
+
+            /* 页面可见的现价先同步补上，接口返回后再覆盖 */
+            const seed = {};
+            rows.forEach(row => {
+                const id = wishlistRowAppId(row);
+                if (!id) return;
+                const p = wishlistRowPrice(row);
+                if (p) seed[id] = p;
+            });
+
+            /* 先把页面自带的现价画上去，接口回来再补齐史低 */
+            rows.forEach(row => {
+                const id = wishlistRowAppId(row);
+                if (id && seed[id]) paintWishlistRow(row, { low: null, current: seed[id] });
+            });
+
+            const data = await fetchWishlistData(ids, seed);
             wlData = data;
             rows.forEach(row => {
                 const id = wishlistRowAppId(row);
-                if (id) paintWishlistRow(row, data[id]);
+                if (id && data[id]) paintWishlistRow(row, data[id]);
             });
         } finally {
             wlRunning = false;
@@ -596,41 +687,50 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
     }
 
     function startWishlistPage() {
-        let wlTries = 0;
-        const wlTimer = setInterval(() => {
-            if (wishlistRows().length) {
-                clearInterval(wlTimer);
-                refreshWishlist();
-                let debounceId = null;
-                let lastSig = wishlistRows().map(wishlistRowAppId).join(",");
-                const observer = new MutationObserver(() => {
-                    // 滚动懒加载 / 翻页 / Steam 自己重建行 → 行集合变化才重新取数
-                    const sig = wishlistRows().map(wishlistRowAppId).join(",");
-                    if (sig !== lastSig) {
-                        lastSig = sig;
-                        clearTimeout(debounceId);
-                        debounceId = setTimeout(refreshWishlist, 350);
-                        return;
-                    }
-                    // 行数没变但行被重建（脚本插入的块会跟着消失）→ 用已有数据直接补画
-                    wishlistRows().forEach(row => {
-                        if (row.querySelector(".shc-wl-info")) return;
-                        const id = wishlistRowAppId(row);
-                        if (id && wlData[id]) paintWishlistRow(row, wlData[id]);
-                    });
+        function bootWishlist() {
+            if (!wishlistRows().length) return false;
+            refreshWishlist();
+            let debounceId = null;
+            let lastSig = wishlistRows().map(wishlistRowAppId).join(",");
+            const observer = new MutationObserver(muts => {
+                /* 脚本自己插入/重画造成的变更直接忽略，避免自我触发 */
+                const foreign = muts.some(m => {
+                    const el = m.target.nodeType === 1 ? m.target : m.target.parentElement;
+                    return !(el && el.closest && el.closest(".shc-wl-info"));
                 });
-                observer.observe(document.body, { childList: true, subtree: true });
-            } else if (++wlTries > 40) {
-                clearInterval(wlTimer);
-            }
-        }, 250);
+                if (!foreign) return;
+                // 滚动懒加载 / 翻页 / Steam 自己重建行 → 行集合变化才重新取数
+                const sig = wishlistRows().map(wishlistRowAppId).join(",");
+                if (sig !== lastSig) {
+                    lastSig = sig;
+                    clearTimeout(debounceId);
+                    debounceId = setTimeout(refreshWishlist, 350);
+                    return;
+                }
+                // 行数没变但行被重建（脚本插入的块会跟着消失）→ 用已有数据直接补画
+                wishlistRows().forEach(row => {
+                    if (row.querySelector(".shc-wl-info")) return;
+                    const id = wishlistRowAppId(row);
+                    if (id && wlData[id]) paintWishlistRow(row, wlData[id]);
+                });
+            });
+            observer.observe(document.body, { childList: true, subtree: true });
+            return true;
+        }
+
+        if (!bootWishlist()) {
+            let wlTries = 0;
+            const wlTimer = setInterval(() => {
+                if (bootWishlist() || ++wlTries > 40) clearInterval(wlTimer);
+            }, 120);
+        }
     }
 
     /* ================= 自动更新兜底 ================= */
     /* 用户脚本头部只能写一条 @updateURL，写多行也只有一条生效。
        走 ghfast 加速直取 raw：不缓存，拉到的永远是 main 最新内容；
        jsDelivr 的 @main 有 12 小时缓存，实测 purge 后仍会返回旧版，所以只当最后的兜底。 */
-    const SELF_VERSION = (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "1.1.9";
+    const SELF_VERSION = (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "1.3.0";
     const UPDATE_MIRRORS = [
         "https://ghfast.top/https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js",  // 主更新地址：加速直取 raw，不缓存
         "https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js",   // 原地址：GitHub raw 源头
