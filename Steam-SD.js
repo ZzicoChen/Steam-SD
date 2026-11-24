@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Steam游戏历史最低价格
 // @namespace    https://github.com/beerleexc
-// @version      1.3.1
+// @version      1.5
 // @description  在 Steam 游戏商店页每个「购买」区块内、愿望单列表每一行，显示历史最低价与当前最低价（Steam 渠道），自动跳过下载 Demo、请求访问权限等区块
 // @author       beerlee
 // @license      MIT
@@ -56,27 +56,22 @@
             : String(Number(Number(amount).toFixed(2)));
         return sym + num;
     }
-    function formatDate(raw) {
-        const m = String(raw || "").match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    /* 日期统一成 年.月.日，月和日都补零：2026.01.01；解析不了返回空串 */
+    function dottedDate(raw) {
+        const m = String(raw || "").match(/(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/);
         if (!m) return "";
-        return `${m[1]}/${Number(m[2])}/${Number(m[3])}`;
+        return `${m[1]}.${String(Number(m[2])).padStart(2, "0")}.${String(Number(m[3])).padStart(2, "0")}`;
     }
 
     /* ---------------- 请求层 ---------------- */
-    let reqCount = 0;   // 诊断用：本页发起了多少次接口请求（可在控制台看 html[data-shc-req]）
-    function bumpReq() {
-        reqCount++;
-        document.documentElement.dataset.shcReq = String(reqCount);
-    }
     function request(opts) {
         return new Promise((resolve, reject) => {
-            bumpReq();
             GM_xmlhttpRequest({
                 method: opts.method || "GET",
                 url: opts.url,
                 headers: opts.headers || {},
                 data: opts.data === undefined ? undefined : JSON.stringify(opts.data),
-                timeout: opts.timeout || 8000,
+                timeout: opts.timeout || 15000,
                 onload: r => r.status >= 200 && r.status < 400
                     ? resolve(r.responseText)
                     : reject(Object.assign(new Error("HTTP " + r.status), { status: r.status })),
@@ -110,7 +105,8 @@
     async function fetchXiaoheiheLow(appid, cc) {
         const d = await getJSON({
             url: `https://api.xiaoheihe.cn/game/get_game_prices/history/v2?appid=${appid}&cc=${cc}`,
-            headers: { Accept: "application/json" }
+            headers: { Accept: "application/json" },
+            timeout: 8000   // 兜底请求不给无限等待：慢就直接跳过
         });
         const result = d && d.status === "ok" ? d.result : null;
         const li = result && result.lowest_info;
@@ -123,7 +119,7 @@
             amount: amount,
             currency: currency || "CNY",
             cut: Number(li.discount) > 0 ? Number(li.discount) : 0,
-            date: formatDate(li.date)
+            date: dottedDate(li.date)
         };
     }
 
@@ -131,7 +127,8 @@
     async function fetchSteamCurrent(appid, cc) {
         const d = await getJSON({
             url: `https://store.steampowered.com/api/appdetails?appids=${appid}&cc=${cc}&l=schinese&filters=price_overview`,
-            headers: { Accept: "application/json" }
+            headers: { Accept: "application/json" },
+            timeout: 6000
         });
         const node = d && d[String(appid)];
         if (!node || !node.success) return null;
@@ -148,14 +145,34 @@
         amount: Number(entry.lowest.price.amount),
         currency: entry.lowest.price.currency,
         cut: Number(entry.lowest.cut) > 0 ? Number(entry.lowest.cut) : 0,
-        date: formatDate(entry.lowest.timestamp)
+        date: dottedDate(entry.lowest.timestamp)
     } : null;
 
     const pickCurrent = entry => entry && entry.current && entry.current.price ? {
         amount: Number(entry.current.price.amount),
         currency: entry.current.price.currency,
-        cut: Number(entry.current.cut) > 0 ? Number(entry.current.cut) : 0
+        cut: Number(entry.current.cut) > 0 ? Number(entry.current.cut) : 0,
+        date: dottedDate(entry.current.timestamp)   // 这条现价是 AugmentedSteam 最近一次记录到的折扣时间
     } : null;
+
+    /* 今天（本地时区），用于「当前正是在打折」时给史低行补一个日期 */
+    function todayText() {
+        const d = new Date();
+        return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+    }
+
+    /* 没有史低数据时史低行要写日期：
+       用「本机第一次看到它打折」的那天（按 appid 存一次，之后一直沿用） */
+    function firstCutDate(key) {
+        const storeKey = `shcCutDate:${CC}:${key}`;
+        let saved = "";
+        try { saved = String(GM_getValue(storeKey, "") || ""); } catch { /* ignore */ }
+        if (!saved) {
+            saved = todayText();
+            try { GM_setValue(storeKey, saved); } catch { /* ignore */ }
+        }
+        return saved;
+    }
 
     /* ---------------- 目标区块：只认「购买」标题，跳过 Demo / 请求访问权限 ---------------- */
     const TITLE_SKIP = /下载|试玩|Demo|请求访问权限|Request\s*Access|Play|免费/i;
@@ -165,7 +182,7 @@
         document.querySelectorAll("#game_area_purchase .game_area_purchase_game").forEach(block => {
             const titleEl = block.querySelector("h2.title, h1");
             const title = String(titleEl && titleEl.textContent || "").replace(/\s+/g, " ").trim();
-            if (!/^(购买|Buy|Purchase)/i.test(title)) return;   // 必须是购买区块
+            if (!/^(购买|预购|Buy|Purchase|Pre-?purchase|Preorder|Pre-order)/i.test(title)) return;   // 购买 / 预购区块
             if (TITLE_SKIP.test(title)) return;                 // 排除下载 Demo / 请求访问权限
 
             const wrapper = block.closest("[data-ds-bundleid]");
@@ -184,31 +201,20 @@
     }
 
     /* ---------------- 取数（含 6 小时缓存） ---------------- */
-    /* 缓存版本号必须与写入一致，否则读永远不命中（旧版 bug：写 v4、读 v3 → 每次刷新都重新请求） */
     const CACHE_TTL = 6 * 60 * 60 * 1e3;
-    const CACHE_VER = 4;
     function cacheGet(key) {
         try {
             const hit = GM_getValue(key, null);
-            if (hit && hit.v === CACHE_VER && Date.now() - hit.t < CACHE_TTL) return hit.data;
+            if (hit && hit.v === 3 && Date.now() - hit.t < CACHE_TTL) return hit.data;
         } catch { /* ignore */ }
         return null;
     }
     function cacheSet(key, data) {
-        try { GM_setValue(key, { v: CACHE_VER, t: Date.now(), data: data }); } catch { /* ignore */ }
-    }
-
-    const cacheKeyOf = targets => `shcAppLow:v4:${CC}:${targets.map(t => t.key).sort().join("|")}`;
-
-    /* 已有缓存时同步返回，页面立刻就能画出来，不必等网络 */
-    function cachedData(targets) {
-        const key = cacheKeyOf(targets);
-        const cached = cacheGet(key);
-        return cached ? { key: key, data: cached } : null;
+        try { GM_setValue(key, { v: 3, t: Date.now(), data: data }); } catch { /* ignore */ }
     }
 
     async function buildData(targets) {
-        const cacheKey = cacheKeyOf(targets);
+        const cacheKey = `shcAppLow:v3:${CC}:${targets.map(t => t.key).sort().join("|")}`;
         const cached = cacheGet(cacheKey);
         if (cached) return cached;
 
@@ -222,24 +228,18 @@
             out[t.key] = { low: pickLow(entry), current: pickCurrent(entry) };
         });
 
-        /* 兜底全部并发：小黑盒史低 + Steam 官方现价同时发，不再一个接一个等 */
-        await Promise.all(targets.filter(t => t.kind === "app").map(async t => {
-            const item = out[t.key];
-            const [low, cur] = await Promise.all([
-                item.low ? null : fetchXiaoheiheLow(t.id, CC).catch(() => null),
-                item.current ? null : fetchSteamCurrent(t.id, CC).catch(() => null)
-            ]);
-            if (low) item.low = low;
-            if (cur) item.current = cur;
-        }));
-
-        // 最后兜底：接口缺「当前价」时读页面自身价格（同步、零请求）
-        targets.forEach(t => {
-            const item = out[t.key];
-            if (item.current) return;
-            const cur = parseCurrentFromBlock(t.block);
-            if (cur) item.current = cur;
-        });
+        // app 区块兜底：小黑盒史低 / Steam 官方当前价
+        for (const t of targets) {
+            if (t.kind !== "app") continue;
+            if (!out[t.key].low) {
+                const low = await fetchXiaoheiheLow(t.id, CC).catch(() => null);
+                if (low) out[t.key].low = low;
+            }
+            if (!out[t.key].current) {
+                const cur = await fetchSteamCurrent(t.id, CC).catch(() => null);
+                if (cur) out[t.key].current = cur;
+            }
+        }
 
         cacheSet(cacheKey, out);
         return out;
@@ -251,12 +251,11 @@
 font-family:"Motiva Sans",Arial,sans-serif}
 .shc-low-info .shc-row{display:block;white-space:nowrap}
 .shc-low-info .shc-label{color:#aebbc7}
-.shc-low-info .shc-date{color:#ffffff}
+.shc-low-info .shc-date{color:#ffffff;margin-left:16px}
 .shc-low-info .shc-shop{color:#cfdae3}
 .shc-low-info .shc-price{color:#ffffff}
 .shc-low-info .shc-cut{display:inline-block;background:#4c6b22;color:#c9f22f;font-weight:700;
 padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
-.shc-low-info .shc-none{color:#8f98a0;font-weight:400}
 .shc-wl-info{display:block;flex:0 0 auto;margin:0 12px 0 0;text-align:left;
 font-size:13.5px;line-height:1.7;letter-spacing:0.2px;color:#aebbc7;font-weight:700;white-space:nowrap;
 font-family:"Motiva Sans",Arial,sans-serif}
@@ -265,8 +264,26 @@ font-family:"Motiva Sans",Arial,sans-serif}
 .shc-wl-info .shc-wl-price{color:#ffffff;font-weight:400}
 .shc-wl-info .shc-wl-cut{display:inline-block;background:#4c6b22;color:#c9f22f;font-weight:700;
 padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
-.shc-wl-info .shc-wl-none{color:#8f98a0;font-weight:400}
 `;
+
+    /* 月份名缩写表：把 "2026 年 1 月 1 日" / "24 Nov, 2026" / "Nov 24, 2026" 这类文字统一成 2026.01.01 */
+    const MONTHS = "jan feb mar apr may jun jul aug sep oct nov dec".split(" ");
+
+    function textDate(raw) {
+        const text = String(raw || "");
+        let m = text.match(/(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
+        if (m) return dottedDate(`${m[1]}-${Number(m[2])}-${Number(m[3])}`);
+        let day, mon, year;
+        m = text.match(/(\d{1,2})\s+([A-Za-z]{3,9}),?\s+(\d{4})/);          // 24 Nov, 2026
+        if (m) [ day, mon, year ] = m.slice(1);
+        else {
+            m = text.match(/([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{4})/);      // Nov 24, 2026
+            if (m) [ mon, day, year ] = m.slice(1);
+        }
+        if (!m) return "";
+        const mi = MONTHS.indexOf(String(mon).slice(0, 3).toLowerCase()) + 1;
+        return mi ? dottedDate(`${year}-${mi}-${day}`) : "";
+    }
 
     function makeRow(label, date, cut, priceText) {
         const row = document.createElement("div");
@@ -278,62 +295,60 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
             row.appendChild(span);
         };
         add("shc-label", label);
-        if (date) {
-            add("shc-date", date);
-            add("shc-label", " 时在 ");
-        }
         add("shc-shop", "Steam");
-        add("shc-label", " 中的 ");
-        /* 按需求：无折扣时也要有胶囊，显示「-0%」；cut 缺失时按 0 处理 */
-        add("shc-cut", "-" + (cut > 0 ? cut : 0) + "%");
+        add("shc-label", " ");
+        add("shc-cut", "-" + String(cut).padStart(2, "0") + "%");   // 折扣百分比也补两位：-07% / -00%
         add("shc-price", " " + priceText);
+        const d = dottedDate(date);   // 日期放在价格后面，统一 年.月.日
+        if (d) add("shc-date", d);
         return row;
     }
 
-        /* 没有史低数据但有折扣时：当前价即史低，直接用当前价把这一行填上（不加备注，避免一行折成两行） */
-    function makeFallbackLowRow(label, cur) {
-        return makeRow(label, "", cur.cut, formatPrice(cur.amount, cur.currency));
+    /* 首发日期：页面上的「发行日期」 */
+    function releaseDateText() {
+        const el = document.querySelector(".release_date .date, .release_date");
+        return textDate(el && el.textContent);
     }
 
-    /* 没有数据的那一行也给个占位，保证「历史最低价 / 当前最低价」两行始终都在 */
-    function makeEmptyRow(label, text) {
-        const row = document.createElement("div");
-        row.className = "shc-row";
-        const a = document.createElement("span");
-        a.className = "shc-label";
-        a.textContent = label;
-        const b = document.createElement("span");
-        b.className = "shc-none";
-        b.textContent = text || "暂无记录";
-        row.append(a, b);
-        return row;
-    }
-
-    /* 页面兜底：接口没给「当前价」时，直接读区块自己显示的价格（保证史低、当前两行都有数） */
+    /* ---------- 区块自己的标价：预购 / 不同版本的价格各读各的，不用 appid 的公共现价 ---------- */
     const SYM_TO_CUR = { "HK$": "HKD", "NT$": "TWD", "R$": "BRL", "¥": "CNY", "￥": "CNY", "$": "USD", "€": "EUR", "£": "GBP", "₽": "RUB", "₩": "KRW", "₹": "INR" };
-    function parseCurrentFromBlock(block) {
-        if (!block) return null;
-        const el = block.querySelector(".discount_final_price") ||
-            block.querySelector(".game_purchase_price") ||
-            block.querySelector(".price");
+
+    function blockPrice(block) {
+        const el = block.querySelector(".discount_final_price")
+            || block.querySelector(".game_purchase_price")
+            || block.querySelector(".price");
         if (!el) return null;
-        const text = String(el.textContent || "").trim();
-        const m = text.match(/([^\d]*)([\d][\d.,]*)/);
+        const text = String(el.textContent || "").replace(/\s+/g, " ").trim();
+        const m = text.match(/(HK\$|NT\$|R\$|¥|￥|\$|€|£|₽|₩|₹)\s*([\d][\d.,]*)/);
         if (!m) return null;
-        let cur = "CNY";
-        Object.keys(SYM_TO_CUR).forEach(sym => { if (m[1].includes(sym)) cur = SYM_TO_CUR[sym]; });
-        let numText = m[2].trim();
-        if (/,\d{2}$/.test(numText)) numText = numText.replace(".", "").replace(",", ".");   // 1.234,56 欧式
-        else numText = numText.replace(/,/g, "");                                             // 1,234.56 英式
-        const amount = Number(numText);
-        if (!isFinite(amount)) return null;
-        const cutText = block.querySelector(".discount_pct");
-        const cut = cutText ? (Math.abs(parseInt(String(cutText.textContent).replace(/[^\d]/g, ""), 10)) || 0) : 0;
-        return { amount: amount, currency: cur, cut: cut };
+        const amount = /,\d{2}$/.test(m[2])
+            ? Number(m[2].replace(".", "").replace(",", "."))
+            : Number(m[2].replace(/,/g, ""));
+        if (!(amount > 0)) return null;
+        // 折扣百分比：区块里的 -10% 徽标，或无障碍标签「立省 10%」
+        let cut = 0;
+        const pct = block.querySelector(".discount_pct");
+        const pctText = pct ? pct.textContent : "";
+        const aria = block.querySelector('[aria-label*="立省"]');
+        const ariaText = aria ? aria.getAttribute("aria-label") || "" : "";
+        const pm = String(pctText).match(/(\d+)\s*%/) || ariaText.match(/立省\s*(\d+)\s*%/);
+        if (pm) cut = Number(pm[1]);
+        return {
+            amount: amount,
+            currency: SYM_TO_CUR[m[1]] || (CC === "cn" ? "CNY" : "USD"),
+            cut: cut > 0 ? cut : 0
+        };
+    }
+
+    /* 即将推出日期：页面顶部「即将推出：2027 年 2 月 13 日」那条气泡 */
+    function comingSoonText() {
+        const el = document.querySelector(".game_area_comingsoon");
+        return textDate(el && el.textContent);
     }
 
     function paintTarget(target, data) {
-        if (!data || (!data.low && !data.current)) return;
+        const cur = blockPrice(target.block) || (data && data.current);
+        if (!data && !cur) return;
         if (!target.block.isConnected) return;
 
         let box = target.block.querySelector(".shc-low-info");
@@ -341,30 +356,22 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
             box = document.createElement("div");
             box.className = "shc-low-info";
         }
-
-        /* 内容没变就不重画：避免自己改 DOM → 触发 observer → 再重画 → 死循环重排 */
-        const sig = JSON.stringify(data);
-        if (box.dataset.sig === sig && box.isConnected) return;
-        box.dataset.sig = sig;
         box.textContent = "";
 
-        if (data.low) {
-            box.appendChild(makeRow("历史最低价是 ", data.low.date, data.low.cut,
+        if (data && data.low) {
+            /* 有史低：直接用史低数据自己的日期 */
+            box.appendChild(makeRow("历史最低价： ", data.low.date, data.low.cut,
                 formatPrice(data.low.amount, data.low.currency)));
-        } else if (data.pending) {
-            /* 数据还没回来：史低那行写「读取中…」，不拿当前价冒充，避免数字先假后真来回跳 */
-            box.appendChild(makeEmptyRow("历史最低价是 ", "读取中…"));
-        } else if (data.current && data.current.cut > 0) {
-            /* 当前就在打折、且查不到更低价记录 → 当前价即史低 */
-            box.appendChild(makeFallbackLowRow("历史最低价是 ", data.current));
-        } else {
-            box.appendChild(makeEmptyRow("历史最低价是 "));
+        } else if (cur) {
+            // 查不到史低记录：当前价就是史低，日期按顺序取——
+            // 最近一次打折日期 → 首发（发行）日期 → 即将推出日期 → 本机第一次看到它打折那天
+            const date = cur.date || releaseDateText() || comingSoonText() || firstCutDate(target.key);
+            box.appendChild(makeRow("历史最低价： ", date, cur.cut,
+                formatPrice(cur.amount, cur.currency)));
         }
-        if (data.current) {
-            box.appendChild(makeRow("当前最低价是在 ", "", data.current.cut,
-                formatPrice(data.current.amount, data.current.currency)));
-        } else {
-            box.appendChild(makeEmptyRow("当前最低价是在 "));
+        if (cur) {
+            box.appendChild(makeRow("当前最低价： ", "", cur.cut,
+                formatPrice(cur.amount, cur.currency)));
         }
 
         // 位置：该区块内 .game_purchase_action（价格+按钮行）之前
@@ -373,14 +380,6 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
             if (action) action.insertAdjacentElement("beforebegin", box);
             else target.block.appendChild(box);
         }
-        markPaint();
-    }
-
-    let firstPaintAt = 0;   // 诊断用：第一次把价格画到页面上的时刻（ms）
-    function markPaint() {
-        if (firstPaintAt) return;
-        firstPaintAt = Math.round(performance.now());
-        document.documentElement.dataset.shcMs = String(firstPaintAt);
     }
 
     function ensureStyle() {
@@ -405,21 +404,6 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
             ensureStyle();
             const targets = collectTargets();
             if (!targets.length) return;
-
-            /* 命中缓存 → 直接画，不发任何请求 */
-            const hit = cachedData(targets);
-            if (hit) {
-                targets.forEach(t => paintTarget(t, hit.data[t.key]));
-                return;
-            }
-
-            /* 未命中 → 先用页面自身的价格立刻画出两行，网络回来后补齐史低 */
-            const quick = {};
-            targets.forEach(t => {
-                quick[t.key] = { low: null, current: parseCurrentFromBlock(t.block), pending: true };
-            });
-            targets.forEach(t => paintTarget(t, quick[t.key]));
-
             const data = await buildData(targets);
             targets.forEach(t => paintTarget(t, data[t.key]));
         } finally {
@@ -431,32 +415,23 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
         }
     }
 
-    /* 立刻试一次，没挂上再每 120ms 试（原来固定等 250ms 才第一次动） */
-    function bootGamePage() {
+    let tries = 0;
+    const startTimer = setInterval(() => {
         const host = document.querySelector("#game_area_purchase");
-        if (!host) return false;
-        refresh();
-        /* 捆绑包展开/收起等真实结构变化时才重跑；脚本自己的插入不算 */
-        let timerId = null;
-        const observer = new MutationObserver(muts => {
-            const foreign = muts.some(m => {
-                const el = m.target.nodeType === 1 ? m.target : m.target.parentElement;
-                return !(el && el.closest && el.closest(".shc-low-info"));
+        if (host) {
+            clearInterval(startTimer);
+            refresh();
+            // 捆绑包展开/隐藏、区块动态出现时补挂
+            let timerId = null;
+            const observer = new MutationObserver(() => {
+                clearTimeout(timerId);
+                timerId = setTimeout(refresh, 300);
             });
-            if (!foreign) return;
-            clearTimeout(timerId);
-            timerId = setTimeout(refresh, 400);
-        });
-        observer.observe(host, { childList: true });
-        return true;
-    }
-
-    if (!bootGamePage()) {
-        let tries = 0;
-        const startTimer = setInterval(() => {
-            if (bootGamePage() || ++tries > 40) clearInterval(startTimer);
-        }, 120);
-    }
+            observer.observe(host, { childList: true });
+        } else if (++tries > 20) {
+            clearInterval(startTimer);
+        }
+    }, 250);
 
     /* ================= 愿望单页 ================= */
     const WL_CHUNK = 50;
@@ -506,98 +481,63 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
         return span;
     }
 
-    const PRICE_RE = /(HK\$|NT\$|R\$|¥|￥|\$|€|£|₽|₩|₹)\s*([\d][\d.,]*)/g;
+    /* 单个 appid 的缓存键：滚动懒加载补行时，取过的游戏直接读缓存，不再整批重取 */
+    const wlCacheKey = id => `shcWlItem:v3:${CC}:${id}`;
 
-    function priceNumber(text) {
-        return /,\d{2}$/.test(text) ? Number(text.replace(".", "").replace(",", ".")) : Number(text.replace(/,/g, ""));
-    }
-
-    /* 读价格格文本时跳过脚本自己插进去的块，避免把上次显示的数字又读回来 */
-    function priceTextExcludingBox(scope) {
-        let out = "";
-        const walk = node => {
-            node.childNodes.forEach(n => {
-                if (n.nodeType === 3) out += n.nodeValue;
-                else if (n.nodeType === 1 && !n.classList.contains("shc-wl-info")) walk(n);
-            });
-        };
-        walk(scope);
-        return out;
-    }
-
-    /* 愿望单行内价格直接读 DOM（不打请求），只把拿不到的部分交给接口 */
-    function wishlistRowPrice(row) {
-        const cell = wishlistPriceCell(row);
-        const scope = cell || row;
-
-        /* Steam 自带 aria-label：「立省 10%。原价为 ¥77.00，折后为 ¥69.30。」——折后价才是当前价 */
-        const labeled = scope.querySelector('[aria-label*="折后"]');
-        if (labeled) {
-            const label = labeled.getAttribute("aria-label") || "";
-            const m = label.match(/折后为\s*(HK\$|NT\$|R\$|¥|￥|\$|€|£|₽|₩|₹)\s*([\d][\d.,]*)/) ||
-                label.match(/(HK\$|NT\$|R\$|¥|￥|\$|€|£|₽|₩|₹)\s*([\d][\d.,]*)/);
-            if (m) {
-                const amount = priceNumber(m[2]);
-                const pct = label.match(/立省\s*(\d+)%/);
-                if (amount > 0) {
-                    return { amount: amount, currency: SYM_TO_CUR[m[1]] || "CNY", cut: pct ? Number(pct[1]) : 0 };
-                }
-            }
-        }
-
-        /* 兜底：有折扣的是「原价 折后价」两个数字，取最后一个；只有一个就直接用 */
-        const text = priceTextExcludingBox(scope);
-        const all = [];
-        let m;
-        PRICE_RE.lastIndex = 0;
-        while ((m = PRICE_RE.exec(text))) all.push(m);
-        if (!all.length) return null;
-        const last = all[all.length - 1];
-        const amount = priceNumber(last[2]);
-        if (!(amount > 0)) return null;
-        const pct = text.match(/[-–]\s*(\d+)\s*%/) || text.match(/(\d+)\s*%/);
-        return { amount: amount, currency: SYM_TO_CUR[last[1]] || "CNY", cut: pct ? Number(pct[1]) : 0 };
-    }
-
-    async function fetchWishlistData(appIds, seed) {
-        const cacheKey = `shcWlLow:v4:${CC}:${appIds.slice().sort().join("|")}`;
-        const cached = cacheGet(cacheKey);
-        if (cached) return cached;
-
+    /* 取数改为「一批一画」：onProgress(subset) 每批回来就回调，由上层立刻绘制，不等兜底 */
+    async function fetchWishlistData(appIds, onProgress) {
         const out = {};
-        for (let i = 0; i < appIds.length; i += WL_CHUNK) {
-            const chunk = appIds.slice(i, i + WL_CHUNK);
+        const emit = ids => {
+            if (!onProgress) return;
+            const subset = {};
+            ids.forEach(id => { if (out[id]) subset[id] = out[id]; });
+            if (Object.keys(subset).length) onProgress(subset);
+        };
+
+        /* 1) 先看单项缓存：命中的可以马上画出来 */
+        const pending = [];
+        appIds.forEach(id => {
+            const hit = cacheGet(wlCacheKey(id));
+            if (hit) out[id] = hit;
+            else pending.push(id);
+        });
+        emit(Object.keys(out));
+
+        /* 2) 未命中的先问 AugmentedSteam：50 一批，一批回来立刻画一批 */
+        const rest = [];
+        for (let i = 0; i < pending.length; i += WL_CHUNK) {
+            const chunk = pending.slice(i, i + WL_CHUNK);
             const prices = await fetchAugmented(CC, chunk, []).catch(() => null);
-            if (!prices) continue;
-            chunk.forEach(id => {
-                const entry = prices["app/" + id];
-                if (entry) out[id] = { low: pickLow(entry), current: pickCurrent(entry) };
-            });
+            if (prices) {
+                chunk.forEach(id => {
+                    const entry = prices["app/" + id];
+                    if (entry) {
+                        const item = { low: pickLow(entry), current: pickCurrent(entry) };
+                        if (item.low || item.current) {
+                            out[id] = item;
+                            cacheSet(wlCacheKey(id), item);   // 有数据就落缓存
+                        } else rest.push(id);
+                    } else rest.push(id);   // AS 没这条记录 → 进兜底
+                });
+            } else {
+                chunk.forEach(id => rest.push(id));   // AS 整个失败 → 整批进兜底
+            }
+            emit(chunk);
         }
 
-        /* 页面能读到的现价先顶上，剩下的才发请求；史低才用小黑盒，并发 8 路 */
-        const queue = [];
-        appIds.forEach(id => {
-            const item = out[id] || (out[id] = { low: null, current: null });
-            if (!item.current && seed[id]) item.current = seed[id];
-            if (!item.low) queue.push(id);
-        });
-
+        /* 3) 兜底（小黑盒史低 + Steam 当前价）：8 路并发，每完成一个立刻画出那一行 */
+        let cursor = 0;
         const worker = async () => {
-            while (queue.length) {
-                const id = queue.shift();
-                const item = out[id];
-                if (!item.current) {
-                    const cur = await fetchSteamCurrent(id, CC).catch(() => null);
-                    if (cur) item.current = cur;
-                }
-                const low = await fetchXiaoheiheLow(id, CC).catch(() => null);
-                if (low) item.low = low;
+            while (cursor < rest.length) {
+                const id = rest[cursor++];
+                const item = (out[id] = out[id] || { low: null, current: null });
+                if (!item.low) item.low = await fetchXiaoheiheLow(id, CC).catch(() => null);
+                if (!item.current) item.current = await fetchSteamCurrent(id, CC).catch(() => null);
+                if (item.low || item.current) cacheSet(wlCacheKey(id), item);
+                emit([ id ]);
             }
         };
-        await Promise.all([worker(), worker(), worker(), worker(), worker(), worker(), worker(), worker()]);
-
-        cacheSet(cacheKey, out);
+        await Promise.all(new Array(8).fill(0).map(() => worker()));
         return out;
     }
 
@@ -614,38 +554,15 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
             box = document.createElement("div");
             box.className = "shc-wl-info";
         }
-        const sig = JSON.stringify(data);
-        if (box.dataset.sig === sig && box.isConnected && box.parentElement) return;
-        box.dataset.sig = sig;
         box.textContent = "";
 
-        if (data.low) {
+        const low = data.low || data.current;   // 查不到史低记录时，当前价就是史低
+        if (low) {
             const line = document.createElement("span");
             line.className = "shc-wl-row";
             line.appendChild(textSpan("shc-wl-label", "史低: "));
-            line.appendChild(textSpan("shc-wl-price", formatPrice(data.low.amount, data.low.currency)));
-            if (data.low.cut > 0) line.appendChild(textSpan("shc-wl-cut", "-" + data.low.cut + "%"));
-            box.appendChild(line);
-        } else if (data.pending) {
-            /* 史低还没取到：写「读取中…」，不拿当前价冒充 */
-            const line = document.createElement("span");
-            line.className = "shc-wl-row";
-            line.appendChild(textSpan("shc-wl-label", "史低: "));
-            line.appendChild(textSpan("shc-wl-none", "读取中…"));
-            box.appendChild(line);
-        } else if (data.current && data.current.cut > 0) {
-            /* 当前就在打折、查不到更低价记录 → 用当前价顶替史低 */
-            const line = document.createElement("span");
-            line.className = "shc-wl-row";
-            line.appendChild(textSpan("shc-wl-label", "史低: "));
-            line.appendChild(textSpan("shc-wl-price", formatPrice(data.current.amount, data.current.currency)));
-            line.appendChild(textSpan("shc-wl-cut", "-" + data.current.cut + "%"));
-            box.appendChild(line);
-        } else {
-            const line = document.createElement("span");
-            line.className = "shc-wl-row";
-            line.appendChild(textSpan("shc-wl-label", "史低: "));
-            line.appendChild(textSpan("shc-wl-none", "暂无记录"));
+            line.appendChild(textSpan("shc-wl-price", formatPrice(low.amount, low.currency)));
+            if (low.cut > 0) line.appendChild(textSpan("shc-wl-cut", "-" + String(low.cut).padStart(2, "0") + "%"));
             box.appendChild(line);
         }
         if (data.current) {
@@ -654,16 +571,9 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
             line.appendChild(textSpan("shc-wl-label", "当前: "));
             line.appendChild(textSpan("shc-wl-price", formatPrice(data.current.amount, data.current.currency)));
             box.appendChild(line);
-        } else {
-            const line = document.createElement("span");
-            line.className = "shc-wl-row";
-            line.appendChild(textSpan("shc-wl-label", "当前: "));
-            line.appendChild(textSpan("shc-wl-none", "暂无记录"));
-            box.appendChild(line);
         }
 
         /* 新版：插进价格格里那条「价格 + 购物车」横排的最前面，与价格同一行、整体靠左 */
-        markPaint();
         const cell = wishlistPriceCell(row);
         if (cell) {
             const line = wishlistPriceLine(cell, box);
@@ -704,27 +614,18 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
             if (!rows.length) return;
             const ids = [ ...new Set(rows.map(wishlistRowAppId).filter(Boolean)) ];
             if (!ids.length) return;
-
-            /* 页面可见的现价先同步补上，接口返回后再覆盖 */
-            const seed = {};
-            rows.forEach(row => {
-                const id = wishlistRowAppId(row);
-                if (!id) return;
-                const p = wishlistRowPrice(row);
-                if (p) seed[id] = p;
+            const data = await fetchWishlistData(ids, subset => {
+                // 哪一批回来就先画哪一批：不等兜底、不等全部取完
+                Object.assign(wlData, subset);
+                rows.forEach(row => {
+                    const id = wishlistRowAppId(row);
+                    if (id && subset[id]) paintWishlistRow(row, subset[id]);
+                });
             });
-
-            /* 先把页面自带的现价画上去，接口回来再补齐史低 */
-            rows.forEach(row => {
-                const id = wishlistRowAppId(row);
-                if (id && seed[id]) paintWishlistRow(row, { low: null, current: seed[id], pending: true });
-            });
-
-            const data = await fetchWishlistData(ids, seed);
             wlData = data;
             rows.forEach(row => {
                 const id = wishlistRowAppId(row);
-                if (id && data[id]) paintWishlistRow(row, data[id]);
+                if (id) paintWishlistRow(row, data[id]);
             });
         } finally {
             wlRunning = false;
@@ -736,50 +637,41 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
     }
 
     function startWishlistPage() {
-        function bootWishlist() {
-            if (!wishlistRows().length) return false;
-            refreshWishlist();
-            let debounceId = null;
-            let lastSig = wishlistRows().map(wishlistRowAppId).join(",");
-            const observer = new MutationObserver(muts => {
-                /* 脚本自己插入/重画造成的变更直接忽略，避免自我触发 */
-                const foreign = muts.some(m => {
-                    const el = m.target.nodeType === 1 ? m.target : m.target.parentElement;
-                    return !(el && el.closest && el.closest(".shc-wl-info"));
+        let wlTries = 0;
+        const wlTimer = setInterval(() => {
+            if (wishlistRows().length) {
+                clearInterval(wlTimer);
+                refreshWishlist();
+                let debounceId = null;
+                let lastSig = wishlistRows().map(wishlistRowAppId).join(",");
+                const observer = new MutationObserver(() => {
+                    // 滚动懒加载 / 翻页 / Steam 自己重建行 → 行集合变化才重新取数
+                    const sig = wishlistRows().map(wishlistRowAppId).join(",");
+                    if (sig !== lastSig) {
+                        lastSig = sig;
+                        clearTimeout(debounceId);
+                        debounceId = setTimeout(refreshWishlist, 350);
+                        return;
+                    }
+                    // 行数没变但行被重建（脚本插入的块会跟着消失）→ 用已有数据直接补画
+                    wishlistRows().forEach(row => {
+                        if (row.querySelector(".shc-wl-info")) return;
+                        const id = wishlistRowAppId(row);
+                        if (id && wlData[id]) paintWishlistRow(row, wlData[id]);
+                    });
                 });
-                if (!foreign) return;
-                // 滚动懒加载 / 翻页 / Steam 自己重建行 → 行集合变化才重新取数
-                const sig = wishlistRows().map(wishlistRowAppId).join(",");
-                if (sig !== lastSig) {
-                    lastSig = sig;
-                    clearTimeout(debounceId);
-                    debounceId = setTimeout(refreshWishlist, 350);
-                    return;
-                }
-                // 行数没变但行被重建（脚本插入的块会跟着消失）→ 用已有数据直接补画
-                wishlistRows().forEach(row => {
-                    if (row.querySelector(".shc-wl-info")) return;
-                    const id = wishlistRowAppId(row);
-                    if (id && wlData[id]) paintWishlistRow(row, wlData[id]);
-                });
-            });
-            observer.observe(document.body, { childList: true, subtree: true });
-            return true;
-        }
-
-        if (!bootWishlist()) {
-            let wlTries = 0;
-            const wlTimer = setInterval(() => {
-                if (bootWishlist() || ++wlTries > 40) clearInterval(wlTimer);
-            }, 120);
-        }
+                observer.observe(document.body, { childList: true, subtree: true });
+            } else if (++wlTries > 40) {
+                clearInterval(wlTimer);
+            }
+        }, 250);
     }
 
     /* ================= 自动更新兜底 ================= */
     /* 用户脚本头部只能写一条 @updateURL，写多行也只有一条生效。
        走 ghfast 加速直取 raw：不缓存，拉到的永远是 main 最新内容；
        jsDelivr 的 @main 有 12 小时缓存，实测 purge 后仍会返回旧版，所以只当最后的兜底。 */
-    const SELF_VERSION = (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "1.3.0";
+    const SELF_VERSION = (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "1.5";
     const UPDATE_MIRRORS = [
         "https://ghfast.top/https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js",  // 主更新地址：加速直取 raw，不缓存
         "https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js",   // 原地址：GitHub raw 源头
