@@ -1,207 +1,169 @@
-<p align="center">
-  <img src="./assets/steam.svg" alt="Steam" width="110" height="110">
-</p>
-
-<h1 align="center">Steam 游戏历史最低价格</h1>
-
-<p align="center">在 Steam 商店游戏页、愿望单列表，直接看到每款游戏的<b>历史最低价</b>与<b>当前最低价</b>，只统计 Steam 官方渠道。</p>
+# Steam游戏历史最低价格
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.1.1-4c6b22" alt="version">
-  <img src="https://img.shields.io/badge/license-MIT-blue" alt="license">
-  <img src="https://img.shields.io/badge/platform-Steam%20Store-1b2838" alt="platform">
+  <img src="assets/steam.svg" width="72" alt="Steam">
 </p>
 
+<p align="center"><b>在 Steam 商店页与愿望单里，直接看到「历史最低价 + 当前最低价」</b></p>
+
 <p align="center">
-  <a href="https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js"><img src="https://img.shields.io/badge/原地址-raw-4c6b22?logo=github&logoColor=white" alt="raw"></a>
-  <a href="https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js"><img src="https://img.shields.io/badge/镜像-jsDelivr-blue" alt="jsDelivr"></a>
-  <a href="https://ghfast.top/https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js"><img src="https://img.shields.io/badge/国内加速-ghfast-9cf" alt="ghfast"></a>
-  <a href="https://github.com/ZzicoChen/Steam-SD/blob/main/Steam-SD.js"><img src="https://img.shields.io/badge/源码-GitHub-181717?logo=github" alt="源码"></a>
+  <img alt="version" src="https://img.shields.io/badge/version-1.1.7-brightgreen">
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-blue">
+  <img alt="platform" src="https://img.shields.io/badge/platform-Tampermonkey%20%7C%20Violentmonkey-orange">
+  <img alt="region" src="https://img.shields.io/badge/currency-CNY%20%2F%20follow%20store-lightgrey">
 </p>
+
+一个轻量的用户脚本：不打开第三方比价站，在 Steam 自己的页面上就能判断「现在值不值得买」。
+只统计 **Steam 商店渠道** 的价格，货币跟随你的商店地区。
 
 ---
 
-## 快速获取
-
-| 用途 | 地址 |
-| --- | --- |
-| **原地址（GitHub raw）** | `https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js` |
-| **镜像（jsDelivr，国内推荐）** | `https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js` |
-| **国内加速（第三方兜底）** | `https://ghfast.top/https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js` |
-| **在线查看源码** | [Steam-SD.js](./Steam-SD.js) |
-
-三个地址内容一致、随时取最新版，不同网络环境下哪个能用就用哪个。
-
-## 效果
-
-### 商店游戏页
-
-在每个「购买」区块内、价格与「添加至购物车」那一行的正上方，会多出两行小字：
-
-```text
-历史最低价是 2026/11/14 时在 Steam 中的 -15% ¥42.5
-当前最低价是在 Steam 中的 -0% ¥50
-```
-
-### 愿望单
-
-在愿望单列表每一行的右侧、价格与「添加到购物车」按钮的左边，显示两行紧凑信息（新版 Steam 愿望单同样生效）：
-
-```text
-史低: ¥73.50 -25%
-当前: ¥138.00
-```
-
-（若史低无折扣，则不显示 `-XX%` 部分；当前价拿不到时只显示史低行。）
-
-- 字体、颜色、绿色折扣胶囊都对齐 Steam / Augmented Steam 的原生样式（12-13px 灰字 + 品牌绿）
-- 没有数据时整个区块不渲染，不留空壳，不报错弹窗
-
 ## 功能
 
-- **商店页 + 愿望单双场景**：同一个脚本同时支持 `/app/` 游戏页与 `/wishlist/` 愿望单页
-- **只认可购买区块**：标题必须以「购买 / Buy / Purchase」开头才算数
-- **自动跳过干扰区块**：「下载 Demo」「请求访问权限」「免费开玩」等一律不插入
-- **捆绑包独立取价**：每个 Bundle 按自己的 `data-ds-bundleid` 单独查，不是成员游戏价格的加总
-- **地区自动识别**：读 Steam 页面自带的 `g_strCountryCode`，其次 URL 的 `?cc=`，无需手动切区
-- **三层数据源兜底**：主源挂了自动回落，不会整块消失
-- **6 小时本地缓存**：重复打开同一页面不会反复请求接口
-- **愿望单批量查询**：一次请求查完当前页全部 appid（每 50 个一组），只对缺数据项并发补查
-- **适配新版愿望单 DOM**：按 `div.Panel[data-index]` 行 + `gridArea=purchase` 价格格定位，类名改版也不会失效
-- **多镜像自更新兜底**：用户脚本只能写一条 `@updateURL`，脚本自己每 6 小时核对 jsDelivr / raw / ghfast 三个地址，发现新版就在右下角提示安装
-- **无需任何 API Key**
+**商店页（`store.steampowered.com/app/*`）**
+- 每个「购买」区块内追加两行小字：历史最低价（含日期、渠道、折扣、价格）与当前最低价
+- 本体、Deluxe Edition、捆绑包分别取价，捆绑包不会被平均价糊住
+- 自动跳过「下载 Demo」「请求访问权限」等没有价格意义的区块
+
+**愿望单（`store.steampowered.com/wishlist/*`）**
+- 每行在价格左侧显示「史低 / 当前」，左对齐、与「添加购物车」同一行
+- 配色、字号、字距与商店页完全一致
+- 滚动加载、窗口缩放、Steam 重建列表行都会自动补画
+
+**通用**
+- 价格数据本地缓存 6 小时，避免每次刷新都打接口
+- 多镜像核对更新，发现新版在右下角提示
+- 零依赖，单文件，纯原生 JS
+
+---
+
+## 效果图
+
+**愿望单**（账号信息已打码）
+
+![愿望单效果](wishlist.png)
+
+**商店页**（本体 / Deluxe Edition / 捆绑包三处都有）
+
+![商店页效果](store.png)
+
+---
 
 ## 安装
 
-1. 先装一个用户脚本管理器：**Tampermonkey** / **Violentmonkey**，或浏览器自带的脚本功能
-2. 新建脚本，把 [`Steam-SD.js`](./Steam-SD.js) 全文粘贴进去，保存（或点上方任一地址一键安装）
-3. 打开任意 Steam 游戏页（`https://store.steampowered.com/app/xxxx`）或愿望单页，刷新即可
+1. 先装脚本管理器：[Tampermonkey](https://www.tampermonkey.net/) 或 Violentmonkey
+2. 打开 [Releases](https://github.com/ZzicoChen/Steam-SD/releases/latest)，点 **`Steam-SD.Install.user.js`** —— 会直接弹出油猴安装页，点「安装」即可
+3. 想自己看代码的：下载 **`Steam-SD.js`**（普通文本，不触发安装），复制全文到脚本管理器里新建脚本
 
-脚本头部固定如下：
+> 两个附件的区别：`Steam-SD.Install.user.js` 结尾是 `.user.js`，浏览器/油猴识别为脚本并弹安装页；`Steam-SD.js` 只是源码文件，点了就是普通下载。
 
-```js
-// @updateURL    https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js
-// @downloadURL  https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js
-// @match        https://store.steampowered.com/app/*
-// @match        https://store.steampowered.com/wishlist/*
-// @connect      api.augmentedsteam.com
-// @connect      api.xiaoheihe.cn
-// @connect      store.steampowered.com
-// @connect      cdn.jsdelivr.net
-// @connect      raw.githubusercontent.com
-// @connect      ghfast.top
-```
+安装完打开任意游戏页或愿望单，几秒内出现史低信息（首次要请求价格接口）。
 
-### 更新地址能不能写多条？
+---
 
-不能。用户脚本规范里 `@updateURL` / `@downloadURL` 都只能生效一条，写多行也只有一条被读取。所以本脚本的做法是：
+## 更新
 
-1. 头部元数据用 jsDelivr（国内可访问）做官方更新地址
-2. 脚本内部自己再核对三个镜像（jsDelivr → raw 原地址 → ghfast 加速），谁先返回更高的 `@version` 就在页面右下角弹出「脚本有新版本 vX，点此安装」
+| 入口 | 地址 | 说明 |
+| --- | --- | --- |
+| 主（脚本头部 `@updateURL`） | `https://ghfast.top/https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js` | 加速直取 raw，**不缓存**，拉到的就是最新 |
+| 原地址 | `https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js` | GitHub 真正的源头，国内可能无法直连 |
+| 兜底 | `https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js` | jsDelivr 的 `@main` 有约 12 小时缓存，可能滞后 |
 
-### 自动更新失败 / 更新后还是旧版？
+- 脚本每 6 小时核对一次（`ghfast → raw → jsDelivr` 依次尝试），有新版本在右下角提示「点此安装」
+- 头部只能写一条 `@updateURL`，其余两条以注释形式保留在脚本里，方便自行切换
+- 手动更新：下载新版 `Steam-SD.Install.user.js` 覆盖即可，配置（缓存）不会丢
 
-- **提示「更新失败」**：基本是国内的 raw.githubusercontent.com 域名访问不通，v1.0.9 起已换成 jsDelivr 镜像。旧安装需要**重装一次**。
-- **刚发新版，检查更新却还是旧版**：jsDelivr 对分支（`@main`）有缓存，一般几小时、最长 12 小时才会刷新；想立刻拿新版就用 raw 或 ghfast 地址重装。
+---
 
-### 图标显示为 `{}`？
+## 配色与排版规范
 
-用户脚本的图标**只在安装那一刻抓取并缓存**，之后只更新正文是不会重抓的。解决办法：把脚本删掉，重新安装一次即可（已把图标改成内嵌 base64，重装后不会再出现此问题）。
+| 元素 | 颜色 | 备注 |
+| --- | --- | --- |
+| 中文说明（史低 / 当前 / 时在…） | `#aebbc7` | 浅灰，和数字区分 |
+| 价格数字 | `#ffffff` | 纯白；愿望单不加粗，避免抢视线 |
+| 折扣百分比 | 字 `#c9f22f`、底 `#4c6b22` | 胶囊：圆角 2px、padding 0 4px、12.5px |
+| 日期 | `#ffffff` | 与价格同色，同级信息 |
+| 渠道名 Steam | `#cfdae3` | 比正文略亮 |
+| 字号 / 行高 / 字距 | `13.5px / 1.7 / 0.2px` | 商店页与愿望单一致 |
+| 字族 | `"Motiva Sans", Arial, sans-serif` | 贴合 Steam 原生观感 |
 
-## 挂载位置
+---
 
-### 商店游戏页
-
-插入点是每个购买区块内部的 `.game_purchase_action`（价格 + 按钮行）**之前**：
-
-| 区块类型 | 实际位置 |
-| --- | --- |
-| 普通游戏 | 紧贴在「购买 XXX」标题下方 |
-| 捆绑包 | 在包内容图片之后、价格行之上 |
-| 下载 Demo / 请求访问权限 | **不插入** |
-
-### 愿望单
-
-新版 Steam 愿望单每一行是一个 CSS Grid 卡片，价格与「添加到购物车」位于 `gridArea = purchase` 的格子里；脚本把两行文字插在该格最前面，整组仍然靠右对齐：
-
-| 情况 | 表现 |
-| --- | --- |
-| 在售游戏 | 「史低 / 当前」两行都在 |
-| 未发售、已下架、无价 | 不渲染 |
-| 滚动懒加载新增的行 | 行集合变化时自动补挂；行被 Steam 重建时用已取到的数据直接补画 |
-
-## 数据来源
+## 数据来源与价格口径
 
 | 用途 | 接口 | 说明 |
 | --- | --- | --- |
-| 史低 + 当前价（主） | `POST https://api.augmentedsteam.com/prices/v2` | 免 Key；`shops: [61]` 锁定 Steam 官方商店；数据底层来自 IsThereAnyDeal |
-| 史低（兜底） | `GET https://api.xiaoheihe.cn/game/get_game_prices/history/v2` | 主源无史低时启用 |
-| 当前价（兜底） | `GET https://store.steampowered.com/api/appdetails` | 主源缺 `current` 时补位 |
-| 地区 | Steam 页面变量 `g_strCountryCode` / URL `?cc=` | 纯本地读取，不联网 |
+| 现价 | Steam `store.steampowered.com` GetItems | appid + 地区，拿当前价与折扣 |
+| 史低 | AugmentedSteam `prices/v2` | 限定 `shops: [61]`，即只取 Steam 渠道 |
+| 兜底 | 小黑盒 `history/v2` | AugmentedSteam 无数据时补 |
+| 缓存 | `GM_setValue`，key `shcAppLow:v3:*` | 6 小时内命中本地缓存 |
 
-## 价格口径
+- 只显示 **Steam 商店** 的历史最低价，不合并第三方平台（Humble、Fanatical 等）
+- 货币随商店地区，国区即 CNY；跨区价格会不同
+- 「-0%」表示当前不是折扣价，即原价购买
 
-- **历史最低价**：该地区 Steam 商店历史上出现过的最低售价（含折扣），后面跟折扣比例与发生日期
-- **当前最低价**：该地区 Steam 商店的当前售价，`-0%` 表示正价无折扣
-- **货币随地区**：中国区 ¥、美区 $、日区 ¥ 等；JPY / IDR / KRW 不显示小数
-- **捆绑包单独计算**：按 bundle 自身的历史价，不取成员游戏的加总
+---
+
+## 版本演进
+
+| 版本 | 主要变化 |
+| --- | --- |
+| v1.0.0 | 首个版本：商店页显示「史低 + 当前」两行（当时内部编号 1.1，为补齐序列按 v1.0.0 发布） |
+| v1.0.1 | 脚本更名为「Steam游戏历史最低价格」，版本号规范化 |
+| v1.0.2 | 评估 SteamDB 作为数据源（结论：不适合直接抓取，无代码变更） |
+| v1.0.3 | 新增脚本图标（首个版本，走 jsDelivr SVG） |
+| v1.0.4 | 图标换成 Steam 官方标志（未能生效） |
+| v1.0.5 | 图标改为单一 SVG 源（未能生效） |
+| v1.0.6 | 图标改走 raw.githubusercontent（未能生效） |
+| v1.0.7 | 定位到根因：脚本管理器抓图标只认 `cdn.jsdelivr.net` |
+| v1.0.8 | 图标内嵌 base64，首次上传 GitHub（含 README、MIT 许可证） |
+| v1.0.9 | 新增愿望单每行显示史低与当前价 |
+| v1.1.0 | 修复新版愿望单不显示：行结构改为 `div.Panel[data-index]`，插入点改到 `gridArea=purchase` 的价格格 |
+| v1.1.1 | 新增多镜像自动更新核对与右下角更新提示 |
+| v1.1.2 | 愿望单史低块左对齐，贴到价格行左侧（与参考效果一致） |
+| v1.1.3 | 文字提亮加粗：浅亮色、`font-weight:700`、字号上调 |
+| v1.1.4 | 配色分层：中文浅灰 / 价格纯白 / 日期浅蓝 |
+| v1.1.5 | 更新源改为 ghfast 直取 raw——jsDelivr `@main` 缓存导致长期收不到新版 |
+| v1.1.6 | 日期改纯蓝、愿望单与商店页配色/字号/字距统一、折扣加胶囊底色、安装件改 `.user.js` |
+| v1.1.7 | 日期改用与价格相同的纯白，愿望单价格数字取消加粗，折扣维持胶囊原样 |
+
+> 说明：v1.0.0–v1.0.3 与 v1.0.5–v1.0.7 当时只存在于本地，未进仓库；这几个 Release 的附件取的是最接近的可追溯快照（`@version` 分别为 1.0.4 / 1.0.8）。
+
+---
 
 ## 常见问题
 
-**某个区块没有显示两行字？**
-免费游戏、锁区、该地区未上架，或者这个区块的标题不是「购买」类（Demo / 试玩 / 请求访问权限会被主动排除）。
+**页面上没有出现史低信息？**
+- 确认地址是 `/app/…` 或 `/wishlist/…`，其他页面脚本不生效
+- 第一次打开要请求价格接口，通常 1–3 秒后出现；期间不要重复刷新
+- 若被广告拦截/隐私插件挡住 `api.augmentedsteam.com`、`api.xiaoheihe.cn`、`store.steampowered.com`，需放行
 
-**愿望单里只有部分游戏显示？**
-未发售 / 已下架 / 该地区无价的条目本来就没有价格数据；其余条目会批量查询，缺失时再逐个补充。
+**为什么有的游戏只有「当前」没有「史低」？**
+- 该 appid 在 Steam 渠道没有历史价格记录（新上架、从未打折、或区域下架）
 
-**数字和 SteamDB 不一样？**
-本脚本只统计 Steam 官方渠道（`shops: 61`），不含 Fanatical、Humble 等第三方站；另外地区不同数值自然不同。
+**更新提示一直不出现？**
+- 老版本可能卡在 jsDelivr 缓存里，手动装一次最新 `Steam-SD.Install.user.js` 即可，之后走 ghfast 即时更新
 
-**会不会请求太频繁？**
-每个页面组合 6 小时内只请求一次；愿望单一次查完当前页（每 50 个 appid 一组），仅对缺数据项并发补查（限 3 并发）。更新核对也是 6 小时一次。
+**捆绑包价格和里面单个游戏加起来不一样？**
+- 捆绑包按自身售卖价取史低，不对子项求和，这是 Steam 的计价方式
 
-**支持英文商店页吗？**
-支持，「购买」和 `Buy` / `Purchase` 两种标题都能识别。
+---
 
-**支持 `/bundle/`、`/sub/` 独立页吗？**
-不支持，只在 `/app/` 游戏页与 `/wishlist/` 愿望单页生效。
+## 目录结构
 
-## 兼容性
+```
+Steam-SD.js                 主脚本（LF，Release 直接下载件）
+README.md                   本文件
+LICENSE                     MIT
+assets/steam.svg            首页图标
+wishlist.png                愿望单效果图（账号已打码）
+store.png                   商店页效果图（好友头像已打码）
+```
 
-- 用户脚本管理器：Tampermonkey、Violentmonkey、支持 `GM_xmlhttpRequest` 的内置脚本功能
-- 需要放行 `@connect` 里的六个域名（`api.augmentedsteam.com`、`api.xiaoheihe.cn`、`store.steampowered.com`、`cdn.jsdelivr.net`、`raw.githubusercontent.com`、`ghfast.top`）
+---
 
-## 更新日志
+## 许可与致谢
 
-### v1.1.1
-
-- **新增：多镜像自动更新核对** — 脚本内每 6 小时依次核对 jsDelivr / GitHub raw / ghfast 三个地址的 `@version`，发现更高版本就在页面右下角提示「点此安装」，避免某个镜像缓存滞后或域名不通时一直收不到更新
-- **新增**：`@connect` 放行 `cdn.jsdelivr.net`、`raw.githubusercontent.com`、`ghfast.top`
-- **文档**：头部保留 raw 原地址与加速镜像注释，README 的「快速获取」同时列出原地址、jsDelivr 镜像、ghfast 加速三个入口
-
-### v1.1.0
-
-- **修复：愿望单不显示历史最低价** — 新版 Steam 愿望单已改为 React + CSS Grid 结构，旧选择器（`.wishlist_row` / `.wl_right`）已失效。现改为：行 = `div.Panel[data-index]`，appid 从行内 `/app/xxxxx` 链接读取，插入点 = `gridArea` 为 `purchase` 的价格格（类名是随机哈希，不写死）
-- **适配懒加载与行重建** — 行集合变化才重新取数；Steam 自己重建行导致插入块消失时，用页内已取到的数据直接补画，不会漏行
-- **样式微调** — 愿望单两行文字与价格、按钮垂直居中，整组靠右，与截图格式一致
-
-### v1.0.9
-
-- **新增：愿望单页支持** — `/wishlist/*` 每行右侧显示 `史低: ¥xx -yy%` 与 `当前: ¥xx`，位置、字号、颜色对齐商店页样式
-- **新增：愿望单批量取价** — 当前页 appid 每 50 个一组请求，缺数据项限 3 并发用小黑盒 / Steam appdetails 兜底
-- **新增：翻页与懒加载监听** — 愿望单滚动加载的新行会自动补挂，不会漏行
-- **修复：自动更新失败** — `@updateURL` / `@downloadURL` 由 raw.githubusercontent.com 换成 jsDelivr 镜像，国内网络可正常检查更新
-- **更名**：`Steam游戏页历史最低价格` → `Steam游戏历史最低价格`
-- **新增**：`@updateURL` / `@downloadURL`，装一次即可自动更新
-
-### v1.0.8
-
-- 挂载位置改到每个购买区块内价格行上方；捆绑包按 bundle 独立取价；排除下载 Demo 与请求访问权限区块
-
-### v1.0.1
-
-- 名称与版本号整理
-
-## License
-
-[MIT](./LICENSE) © ZzicoChen
+- 以 MIT 许可证发布，作者 beerlee，可自由修改与再分发，保留署名即可
+- 愿望单新版 DOM 的适配思路参考了同类脚本 Steam Wishlist Enhancer（同样采用「行容器 + 价格格」的定位方式），代码为本项目独立实现
+- 价格数据来自 Steam 官方接口与 AugmentedSteam，版权归各来源所有；本项目仅做展示，不提供买卖建议
