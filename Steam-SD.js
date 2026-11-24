@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Steam游戏历史最低价格
 // @namespace    https://github.com/beerleexc
-// @version      1.1.1
+// @version      1.1.2
 // @description  在 Steam 游戏商店页每个「购买」区块内、愿望单列表每一行，显示历史最低价与当前最低价（Steam 渠道），自动跳过下载 Demo、请求访问权限等区块
 // @author       beerlee
 // @license      MIT
@@ -230,8 +230,8 @@ font-family:"Motiva Sans",Arial,sans-serif}
 .shc-low-info .shc-date,.shc-low-info .shc-shop,.shc-low-info .shc-price{color:#c6d4df}
 .shc-low-info .shc-cut{display:inline-block;background:#4c6b22;color:#beee11;
 padding:0 4px;margin:0 2px;border-radius:2px;font-size:12px;line-height:1.55}
-.shc-wl-info{display:inline-block;vertical-align:middle;flex:0 0 auto;margin:0 14px 0 0;text-align:right;
-font-size:12px;line-height:1.5;color:#8f98a0;white-space:nowrap;
+.shc-wl-info{display:block;flex:0 0 auto;margin:0 10px 0 0;text-align:left;
+font-size:12px;line-height:1.45;color:#8f98a0;white-space:nowrap;
 font-family:"Motiva Sans",Arial,sans-serif}
 .shc-wl-info .shc-wl-row{display:block}
 .shc-wl-info .shc-wl-price{color:#c6d4df}
@@ -369,6 +369,16 @@ font-family:"Motiva Sans",Arial,sans-serif}
         return null;
     }
 
+    /* 价格格里「价格 + 添加到购物车」是最后那条 flex 横排；史低块插进它最前面，就和价格同一行、靠左 */
+    function wishlistPriceLine(cell, box) {
+        const kids = [...cell.children].filter(c => c !== box);
+        for (let i = kids.length - 1; i >= 0; i--) {
+            const cs = getComputedStyle(kids[i]);
+            if (cs.display.indexOf("flex") > -1 && cs.flexDirection.indexOf("row") === 0) return kids[i];
+        }
+        return null;
+    }
+
     function textSpan(cls, text) {
         const span = document.createElement("span");
         if (cls) span.className = cls;
@@ -445,10 +455,18 @@ font-family:"Motiva Sans",Arial,sans-serif}
             box.appendChild(line);
         }
 
-        /* 新版：插进价格格（purchase）最前面，价格与按钮保持原位、整组靠右 */
+        /* 新版：插进价格格里那条「价格 + 购物车」横排的最前面，与价格同一行、整体靠左 */
         const cell = wishlistPriceCell(row);
         if (cell) {
-            if (getComputedStyle(cell).alignItems !== "center") cell.style.alignItems = "center";
+            const line = wishlistPriceLine(cell, box);
+            if (line) {
+                line.style.alignItems = "center";
+                if (box.parentElement !== line || line.firstElementChild !== box) {
+                    line.insertBefore(box, line.firstElementChild);
+                }
+                return;
+            }
+            /* 兜底：格子里没有横排就退回格子最前面 */
             if (box.parentElement !== cell || cell.firstElementChild !== box) {
                 cell.insertBefore(box, cell.firstElementChild);
             }
@@ -527,7 +545,7 @@ font-family:"Motiva Sans",Arial,sans-serif}
     /* ================= 自动更新兜底 ================= */
     /* 用户脚本头部只能写一条 @updateURL，写多行也只有一条生效。
        这里额外主动核对多个镜像，谁先返回新版本就提示谁，避免镜像缓存或域名不可达时一直收不到更新。 */
-    const SELF_VERSION = (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "1.1.1";
+    const SELF_VERSION = (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "1.1.2";
     const UPDATE_MIRRORS = [
         "https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js",   // 元数据里的主更新地址
         "https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js",  // GitHub 原地址
