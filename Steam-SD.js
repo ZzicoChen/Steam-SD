@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Steam游戏历史最低价格
 // @namespace    https://github.com/beerleexc
-// @version      1.1.9
+// @version      1.2.0
 // @description  在 Steam 游戏商店页每个「购买」区块内、愿望单列表每一行，显示历史最低价与当前最低价（Steam 渠道），自动跳过下载 Demo、请求访问权限等区块
 // @author       beerlee
 // @license      MIT
@@ -273,6 +273,11 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
         return row;
     }
 
+        /* 没有史低数据但有折扣时：当前价即史低，直接用当前价把这一行填上（不加备注，避免一行折成两行） */
+    function makeFallbackLowRow(label, cur) {
+        return makeRow(label, "", cur.cut, formatPrice(cur.amount, cur.currency));
+    }
+
     /* 没有数据的那一行也给个占位，保证「历史最低价 / 当前最低价」两行始终都在 */
     function makeEmptyRow(label) {
         const row = document.createElement("div");
@@ -324,6 +329,9 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
         if (data.low) {
             box.appendChild(makeRow("历史最低价是 ", data.low.date, data.low.cut,
                 formatPrice(data.low.amount, data.low.currency)));
+        } else if (data.current && data.current.cut > 0) {
+            /* 当前就在打折、且查不到更低价记录 → 当前价即史低 */
+            box.appendChild(makeFallbackLowRow("历史最低价是 ", data.current));
         } else {
             box.appendChild(makeEmptyRow("历史最低价是 "));
         }
@@ -500,6 +508,14 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
             line.appendChild(textSpan("shc-wl-label", "史低: "));
             line.appendChild(textSpan("shc-wl-price", formatPrice(data.low.amount, data.low.currency)));
             if (data.low.cut > 0) line.appendChild(textSpan("shc-wl-cut", "-" + data.low.cut + "%"));
+            box.appendChild(line);
+        } else if (data.current && data.current.cut > 0) {
+            /* 当前就在打折、查不到更低价记录 → 用当前价顶替史低 */
+            const line = document.createElement("span");
+            line.className = "shc-wl-row";
+            line.appendChild(textSpan("shc-wl-label", "史低: "));
+            line.appendChild(textSpan("shc-wl-price", formatPrice(data.current.amount, data.current.currency)));
+            line.appendChild(textSpan("shc-wl-cut", "-" + data.current.cut + "%"));
             box.appendChild(line);
         } else {
             const line = document.createElement("span");
