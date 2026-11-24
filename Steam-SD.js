@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Steam游戏历史最低价格
 // @namespace    https://github.com/beerleexc
-// @version      1.0.9
+// @version      1.1.0
 // @description  在 Steam 游戏商店页每个「购买」区块内、愿望单列表每一行，显示历史最低价与当前最低价（Steam 渠道），自动跳过下载 Demo、请求访问权限等区块
 // @author       beerlee
 // @license      MIT
@@ -226,7 +226,7 @@ font-family:"Motiva Sans",Arial,sans-serif}
 .shc-low-info .shc-date,.shc-low-info .shc-shop,.shc-low-info .shc-price{color:#c6d4df}
 .shc-low-info .shc-cut{display:inline-block;background:#4c6b22;color:#beee11;
 padding:0 4px;margin:0 2px;border-radius:2px;font-size:12px;line-height:1.55}
-.shc-wl-info{display:inline-block;vertical-align:middle;margin:0 14px 2px 0;text-align:right;
+.shc-wl-info{display:inline-block;vertical-align:middle;flex:0 0 auto;margin:0 14px 0 0;text-align:right;
 font-size:12px;line-height:1.5;color:#8f98a0;white-space:nowrap;
 font-family:"Motiva Sans",Arial,sans-serif}
 .shc-wl-info .shc-wl-row{display:block}
@@ -337,18 +337,32 @@ font-family:"Motiva Sans",Arial,sans-serif}
     /* ================= 愿望单页 ================= */
     const WL_CHUNK = 50;
 
+    /* 新版愿望单每行是 div.Panel[data-index]，内部类名是每次构建随机生成的哈希，只能靠属性/结构定位；
+       旧版页面是 .wishlist_row，两套都兼容 */
     function wishlistRows() {
+        const rows = [ ...document.querySelectorAll("div.Panel[data-index]") ]
+            .filter(row => row.querySelector('a[href*="/app/"]'));
+        if (rows.length) return rows;
         return [ ...document.querySelectorAll(".wishlist_row") ];
     }
 
     function wishlistRowAppId(row) {
-        let id = Number(row.getAttribute("data-app-id") || row.getAttribute("data-ds-appid"));
+        let id = Number(row.getAttribute("data-app-id") || row.getAttribute("data-ds-appid") || row.getAttribute("data-appid"));
         if (!id) {
-            const a = row.querySelector('a[href*="/app/"]');
-            const m = a && String(a.getAttribute("href") || "").match(/\/app\/(\d+)/);
-            if (m) id = Number(m[1]);
+            for (const a of row.querySelectorAll("a[href]")) {   // 行内第一个 /app/ 链接就是游戏本体
+                const m = String(a.getAttribute("href") || "").match(/\/app\/(\d+)/);
+                if (m) { id = Number(m[1]); break; }
+            }
         }
         return id;
+    }
+
+    /* 新版行是 CSS Grid，价格 + 「添加到购物车」所在格的 gridArea 名为 purchase */
+    function wishlistPriceCell(row) {
+        for (const cell of row.querySelectorAll("div")) {
+            if (/\bpurchase\b/.test(getComputedStyle(cell).gridArea)) return cell;
+        }
+        return null;
     }
 
     function textSpan(cls, text) {
@@ -397,7 +411,11 @@ font-family:"Motiva Sans",Arial,sans-serif}
     }
 
     function paintWishlistRow(row, data) {
-        if (!data || (!data.low && !data.current)) return;
+        if (!data || (!data.low && !data.current)) {
+            const stale = row.querySelector(".shc-wl-info");
+            if (stale) stale.remove();
+            return;
+        }
         if (!row.isConnected) return;
 
         let box = row.querySelector(".shc-wl-info");
@@ -423,8 +441,18 @@ font-family:"Motiva Sans",Arial,sans-serif}
             box.appendChild(line);
         }
 
+        /* 新版：插进价格格（purchase）最前面，价格与按钮保持原位、整组靠右 */
+        const cell = wishlistPriceCell(row);
+        if (cell) {
+            if (getComputedStyle(cell).alignItems !== "center") cell.style.alignItems = "center";
+            if (box.parentElement !== cell || cell.firstElementChild !== box) {
+                cell.insertBefore(box, cell.firstElementChild);
+            }
+            return;
+        }
+        /* 旧版页面兜底 */
         if (!box.isConnected) {
-            const anchor = row.querySelector(".discount_block, .btn_addtocart, .wishlist_add_to_cart, form");
+            const anchor = row.querySelector(".discount_block, .btn_addtocart, .wishlist_add_to_cart");
             if (anchor && anchor.parentElement) anchor.parentElement.insertBefore(box, anchor);
             else (row.querySelector(".wl_right") || row).appendChild(box);
         }
@@ -432,6 +460,7 @@ font-family:"Motiva Sans",Arial,sans-serif}
 
     let wlRunning = false;
     let wlPending = false;
+    let wlData = {};   // 本页已取到的价格，供行重建后快速补画
 
     async function refreshWishlist() {
         if (wlRunning) {
@@ -446,6 +475,7 @@ font-family:"Motiva Sans",Arial,sans-serif}
             const ids = [ ...new Set(rows.map(wishlistRowAppId).filter(Boolean)) ];
             if (!ids.length) return;
             const data = await fetchWishlistData(ids);
+            wlData = data;
             rows.forEach(row => {
                 const id = wishlistRowAppId(row);
                 if (id) paintWishlistRow(row, data[id]);
@@ -465,14 +495,23 @@ font-family:"Motiva Sans",Arial,sans-serif}
             if (wishlistRows().length) {
                 clearInterval(wlTimer);
                 refreshWishlist();
-                // 翻页 / 懒加载出现新行时补挂
                 let debounceId = null;
-                const observer = new MutationObserver(mutations => {
-                    const relevant = mutations.some(m => [ ...m.addedNodes, ...m.removedNodes ]
-                        .some(n => n.nodeType === 1 && n.classList && n.classList.contains("wishlist_row")));
-                    if (!relevant) return;
-                    clearTimeout(debounceId);
-                    debounceId = setTimeout(refreshWishlist, 400);
+                let lastSig = wishlistRows().map(wishlistRowAppId).join(",");
+                const observer = new MutationObserver(() => {
+                    // 滚动懒加载 / 翻页 / Steam 自己重建行 → 行集合变化才重新取数
+                    const sig = wishlistRows().map(wishlistRowAppId).join(",");
+                    if (sig !== lastSig) {
+                        lastSig = sig;
+                        clearTimeout(debounceId);
+                        debounceId = setTimeout(refreshWishlist, 350);
+                        return;
+                    }
+                    // 行数没变但行被重建（脚本插入的块会跟着消失）→ 用已有数据直接补画
+                    wishlistRows().forEach(row => {
+                        if (row.querySelector(".shc-wl-info")) return;
+                        const id = wishlistRowAppId(row);
+                        if (id && wlData[id]) paintWishlistRow(row, wlData[id]);
+                    });
                 });
                 observer.observe(document.body, { childList: true, subtree: true });
             } else if (++wlTries > 40) {
