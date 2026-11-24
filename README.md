@@ -7,10 +7,7 @@
 <p align="center"><b>在 Steam 商店页与愿望单里，直接看到「历史最低价 + 当前最低价」</b></p>
 
 <p align="center">
-  <img alt="version" src="https://img.shields.io/badge/version-1.1.7-brightgreen">
-  <img alt="license" src="https://img.shields.io/badge/license-MIT-blue">
-  <img alt="platform" src="https://img.shields.io/badge/platform-Tampermonkey%20%7C%20Violentmonkey-orange">
-  <img alt="region" src="https://img.shields.io/badge/currency-CNY%20%2F%20follow%20store-lightgrey">
+  <code>版本 1.1.7</code> · <code>MIT 许可</code> · <code>Tampermonkey / Violentmonkey</code> · <code>货币跟随商店地区</code>
 </p>
 
 一个轻量的用户脚本：不打开第三方比价站，在 Steam 自己的页面上就能判断「现在值不值得买」。
