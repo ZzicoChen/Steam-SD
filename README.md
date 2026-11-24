@@ -13,8 +13,8 @@
 </p>
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js"><img src="https://img.shields.io/badge/点此获取脚本-raw-4c6b22?logo=steam&logoColor=white" alt="获取脚本"></a>
-  <a href="https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js"><img src="https://img.shields.io/badge/jsDelivr-镜像-blue" alt="jsDelivr"></a>
+  <a href="https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js"><img src="https://img.shields.io/badge/点此获取脚本-jsDelivr-4c6b22?logo=steam&logoColor=white" alt="获取脚本"></a>
+  <a href="https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js"><img src="https://img.shields.io/badge/raw-备用镜像-blue" alt="raw"></a>
   <a href="https://github.com/ZzicoChen/Steam-SD/blob/main/Steam-SD.js"><img src="https://img.shields.io/badge/源码-GitHub-181717?logo=github" alt="源码"></a>
 </p>
 
@@ -24,11 +24,12 @@
 
 | 用途 | 地址 |
 | --- | --- |
-| **直链获取（推荐）** | `https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js` |
-| **国内镜像** | `https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js` |
+| **国内镜像（推荐）** | `https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js` |
+| **GitHub raw（备用）** | `https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js` |
 | **在线查看源码** | [Steam-SD.js](./Steam-SD.js) |
 
 地址随时取最新版，内容与仓库 `main` 分支同步更新，不用改链接。
+国内网络下 `raw.githubusercontent.com` 经常连不上，安装与自动更新请优先用 jsDelivr 地址。
 
 ## 效果
 
@@ -70,23 +71,29 @@
 ## 安装
 
 1. 先装一个用户脚本管理器：**Tampermonkey** / **Violentmonkey**，或浏览器自带的脚本功能
-2. 新建脚本，把 [`Steam-SD.js`](./Steam-SD.js) 全文粘贴进去，保存
+2. 新建脚本，把 [`Steam-SD.js`](./Steam-SD.js) 全文粘贴进去，保存（或直接点击上方 **jsDelivr** 按钮一键安装）
 3. 打开任意 Steam 游戏页（`https://store.steampowered.com/app/xxxx`）或愿望单页，刷新即可
 
 脚本头部已固定：
 
 ```js
-// @updateURL    https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js
-// @downloadURL  https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js
+// @updateURL    https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js
+// @downloadURL  https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js
 // @match        https://store.steampowered.com/app/*
 // @match        https://store.steampowered.com/wishlist/*
 ```
 
 安装后就支持自动更新；脚本不会影响创意工坊、社区市场等其他页面。
 
+### 自动更新失败？
+
+如果你在脚本管理器里点「检查更新」看到 **更新失败**，基本是国内的 raw.githubusercontent.com 域名访问不通导致的。v1.0.9 已把 `@updateURL` / `@downloadURL` 换成 jsDelivr 镜像，新版不再受此影响。
+
+旧的安装（之前版本没有这个更新地址）需要**重装一次**：点上方 jsDelivr 链接重新安装，或把脚本删掉再装新版，之后就能自动更新了。
+
 ### 图标显示为 `{}`？
 
-用户脚本的图标**只在安装那一刻抓取并缓存**，之后只更新正文是不会重抓的。解决办法：把脚本删掉，重新安装一次即可。
+用户脚本的图标**只在安装那一刻抓取并缓存**，之后只更新正文是不会重抓的。解决办法：把脚本删掉，重新安装一次即可（v1.0.9 已把图标改成内嵌 base64，重装后不会再出现此问题）。
 
 ## 挂载位置
 
@@ -158,6 +165,7 @@
 - **新增：愿望单页支持** — `/wishlist/*` 每行右侧显示 `史低: ¥xx -yy%` 与 `当前: ¥xx`，位置、字号、颜色对齐商店页样式
 - **新增：愿望单批量取价** — 当前页 appid 每 50 个一组请求，缺数据项限 3 并发用小黑盒 / Steam appdetails 兜底
 - **新增：翻页与懒加载监听** — 愿望单滚动加载的新行会自动补挂，不会漏行
+- **修复：自动更新失败** — `@updateURL` / `@downloadURL` 由 raw.githubusercontent.com 换成 jsDelivr 镜像，国内网络可正常检查更新
 - **更名**：`Steam游戏页历史最低价格` → `Steam游戏历史最低价格`
 - **新增**：`@updateURL` / `@downloadURL`，装一次即可自动更新
 
