@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Steam游戏历史最低价格
 // @namespace    https://github.com/beerleexc
-// @version      1.2.0
+// @version      1.2.1
 // @description  在 Steam 游戏商店页每个「购买」区块内、愿望单列表每一行，显示历史最低价与当前最低价（Steam 渠道），自动跳过下载 Demo、请求访问权限等区块
 // @author       beerlee
 // @license      MIT
@@ -268,7 +268,8 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
         }
         add("shc-shop", "Steam");
         add("shc-label", " 中的 ");
-        if (cut > 0) add("shc-cut", "-" + cut + "%");   // 没折扣就不画胶囊，避免出现「-0%」
+        /* 按需求：无折扣时也要有胶囊，显示「-0%」；cut 缺失时按 0 处理 */
+        add("shc-cut", "-" + (cut > 0 ? cut : 0) + "%");
         add("shc-price", " " + priceText);
         return row;
     }
