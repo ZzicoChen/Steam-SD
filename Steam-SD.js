@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Steam游戏历史最低价格
 // @namespace    https://github.com/beerleexc
-// @version      1.1.7
+// @version      1.1.8
 // @description  在 Steam 游戏商店页每个「购买」区块内、愿望单列表每一行，显示历史最低价与当前最低价（Steam 渠道），自动跳过下载 Demo、请求访问权限等区块
 // @author       beerlee
 // @license      MIT
@@ -187,11 +187,11 @@
         return null;
     }
     function cacheSet(key, data) {
-        try { GM_setValue(key, { v: 3, t: Date.now(), data: data }); } catch { /* ignore */ }
+        try { GM_setValue(key, { v: 4, t: Date.now(), data: data }); } catch { /* ignore */ }
     }
 
     async function buildData(targets) {
-        const cacheKey = `shcAppLow:v3:${CC}:${targets.map(t => t.key).sort().join("|")}`;
+        const cacheKey = `shcAppLow:v4:${CC}:${targets.map(t => t.key).sort().join("|")}`;
         const cached = cacheGet(cacheKey);
         if (cached) return cached;
 
@@ -216,6 +216,13 @@
                 const cur = await fetchSteamCurrent(t.id, CC).catch(() => null);
                 if (cur) out[t.key].current = cur;
             }
+        }
+
+        // 所有区块兜底：接口缺「当前价」时读页面自身价格，确保两行都显示
+        for (const t of targets) {
+            if (out[t.key].current) continue;
+            const cur = parseCurrentFromBlock(t.block);
+            if (cur) out[t.key].current = cur;
         }
 
         cacheSet(cacheKey, out);
@@ -262,6 +269,29 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
         add("shc-cut", "-" + cut + "%");
         add("shc-price", " " + priceText);
         return row;
+    }
+
+    /* 页面兜底：接口没给「当前价」时，直接读区块自己显示的价格（保证史低、当前两行都有数） */
+    const SYM_TO_CUR = { "HK$": "HKD", "NT$": "TWD", "R$": "BRL", "¥": "CNY", "￥": "CNY", "$": "USD", "€": "EUR", "£": "GBP", "₽": "RUB", "₩": "KRW", "₹": "INR" };
+    function parseCurrentFromBlock(block) {
+        if (!block) return null;
+        const el = block.querySelector(".discount_final_price") ||
+            block.querySelector(".game_purchase_price") ||
+            block.querySelector(".price");
+        if (!el) return null;
+        const text = String(el.textContent || "").trim();
+        const m = text.match(/([^\d]*)([\d][\d.,]*)/);
+        if (!m) return null;
+        let cur = "CNY";
+        Object.keys(SYM_TO_CUR).forEach(sym => { if (m[1].includes(sym)) cur = SYM_TO_CUR[sym]; });
+        let numText = m[2].trim();
+        if (/,\d{2}$/.test(numText)) numText = numText.replace(".", "").replace(",", ".");   // 1.234,56 欧式
+        else numText = numText.replace(/,/g, "");                                             // 1,234.56 英式
+        const amount = Number(numText);
+        if (!isFinite(amount)) return null;
+        const cutText = block.querySelector(".discount_pct");
+        const cut = cutText ? (Math.abs(parseInt(String(cutText.textContent).replace(/[^\d]/g, ""), 10)) || 0) : 0;
+        return { amount: amount, currency: cur, cut: cut };
     }
 
     function paintTarget(target, data) {
@@ -551,7 +581,7 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
     /* 用户脚本头部只能写一条 @updateURL，写多行也只有一条生效。
        走 ghfast 加速直取 raw：不缓存，拉到的永远是 main 最新内容；
        jsDelivr 的 @main 有 12 小时缓存，实测 purge 后仍会返回旧版，所以只当最后的兜底。 */
-    const SELF_VERSION = (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "1.1.7";
+    const SELF_VERSION = (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "1.1.8";
     const UPDATE_MIRRORS = [
         "https://ghfast.top/https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js",  // 主更新地址：加速直取 raw，不缓存
         "https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js",   // 原地址：GitHub raw 源头
