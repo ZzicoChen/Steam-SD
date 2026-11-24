@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name         Steam游戏历史最低价格
 // @namespace    https://github.com/beerleexc
-// @version      1.1.3
+// @version      1.1.4
 // @description  在 Steam 游戏商店页每个「购买」区块内、愿望单列表每一行，显示历史最低价与当前最低价（Steam 渠道），自动跳过下载 Demo、请求访问权限等区块
 // @author       beerlee
 // @license      MIT
 // @updateURL    https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js
 // @downloadURL  https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js
-// @icon         data:image/png;base64,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
+// @icon         data:image/png;base64,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
 // @match        https://store.steampowered.com/app/*
 // @match        https://store.steampowered.com/wishlist/*
 // @grant        GM_xmlhttpRequest
@@ -224,16 +224,20 @@
 
     /* ---------------- UI：贴在每个购买区块内、价格行正上方 ---------------- */
     const CSS = `
-.shc-low-info{margin:2px 0 6px;font-size:13.5px;line-height:1.7;color:#e6eef6;font-weight:700;
+.shc-low-info{margin:2px 0 6px;font-size:13.5px;line-height:1.7;color:#aebbc7;font-weight:700;
 font-family:"Motiva Sans",Arial,sans-serif}
 .shc-low-info .shc-row{display:block;white-space:nowrap}
-.shc-low-info .shc-date,.shc-low-info .shc-shop,.shc-low-info .shc-price{color:#ffffff}
+.shc-low-info .shc-label{color:#aebbc7}
+.shc-low-info .shc-date{color:#79c0e8}
+.shc-low-info .shc-shop{color:#cfdae3}
+.shc-low-info .shc-price{color:#ffffff}
 .shc-low-info .shc-cut{display:inline-block;background:#4c6b22;color:#c9f22f;font-weight:700;
 padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
 .shc-wl-info{display:block;flex:0 0 auto;margin:0 12px 0 0;text-align:left;
-font-size:13px;line-height:1.5;color:#e6eef6;font-weight:700;white-space:nowrap;
+font-size:13px;line-height:1.5;color:#aebbc7;font-weight:700;white-space:nowrap;
 font-family:"Motiva Sans",Arial,sans-serif}
 .shc-wl-info .shc-wl-row{display:block}
+.shc-wl-info .shc-wl-label{color:#aebbc7;font-weight:700}
 .shc-wl-info .shc-wl-price{color:#ffffff;font-weight:700}
 .shc-wl-info .shc-wl-cut{color:#b8e62b;font-weight:700}
 `;
@@ -442,7 +446,7 @@ font-family:"Motiva Sans",Arial,sans-serif}
         if (data.low) {
             const line = document.createElement("span");
             line.className = "shc-wl-row";
-            line.appendChild(textSpan("", "史低: "));
+            line.appendChild(textSpan("shc-wl-label", "史低: "));
             line.appendChild(textSpan("shc-wl-price", formatPrice(data.low.amount, data.low.currency)));
             if (data.low.cut > 0) line.appendChild(textSpan("shc-wl-cut", " -" + data.low.cut + "%"));
             box.appendChild(line);
@@ -450,7 +454,7 @@ font-family:"Motiva Sans",Arial,sans-serif}
         if (data.current) {
             const line = document.createElement("span");
             line.className = "shc-wl-row";
-            line.appendChild(textSpan("", "当前: "));
+            line.appendChild(textSpan("shc-wl-label", "当前: "));
             line.appendChild(textSpan("shc-wl-price", formatPrice(data.current.amount, data.current.currency)));
             box.appendChild(line);
         }
@@ -545,7 +549,7 @@ font-family:"Motiva Sans",Arial,sans-serif}
     /* ================= 自动更新兜底 ================= */
     /* 用户脚本头部只能写一条 @updateURL，写多行也只有一条生效。
        这里额外主动核对多个镜像，谁先返回新版本就提示谁，避免镜像缓存或域名不可达时一直收不到更新。 */
-    const SELF_VERSION = (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "1.1.3";
+    const SELF_VERSION = (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "1.1.4";
     const UPDATE_MIRRORS = [
         "https://cdn.jsdelivr.net/gh/ZzicoChen/Steam-SD@main/Steam-SD.js",   // 元数据里的主更新地址
         "https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js",  // GitHub 原地址
