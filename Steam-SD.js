@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Steam游戏历史最低价格
 // @namespace    https://github.com/beerleexc
-// @version      1.1.6
+// @version      1.1.7
 // @description  在 Steam 游戏商店页每个「购买」区块内、愿望单列表每一行，显示历史最低价与当前最低价（Steam 渠道），自动跳过下载 Demo、请求访问权限等区块
 // @author       beerlee
 // @license      MIT
@@ -228,7 +228,7 @@
 font-family:"Motiva Sans",Arial,sans-serif}
 .shc-low-info .shc-row{display:block;white-space:nowrap}
 .shc-low-info .shc-label{color:#aebbc7}
-.shc-low-info .shc-date{color:#4dabf7}
+.shc-low-info .shc-date{color:#ffffff}
 .shc-low-info .shc-shop{color:#cfdae3}
 .shc-low-info .shc-price{color:#ffffff}
 .shc-low-info .shc-cut{display:inline-block;background:#4c6b22;color:#c9f22f;font-weight:700;
@@ -238,7 +238,7 @@ font-size:13.5px;line-height:1.7;letter-spacing:0.2px;color:#aebbc7;font-weight:
 font-family:"Motiva Sans",Arial,sans-serif}
 .shc-wl-info .shc-wl-row{display:block;white-space:nowrap}
 .shc-wl-info .shc-wl-label{color:#aebbc7;font-weight:700}
-.shc-wl-info .shc-wl-price{color:#ffffff;font-weight:700}
+.shc-wl-info .shc-wl-price{color:#ffffff;font-weight:400}
 .shc-wl-info .shc-wl-cut{display:inline-block;background:#4c6b22;color:#c9f22f;font-weight:700;
 padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
 `;
@@ -551,7 +551,7 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
     /* 用户脚本头部只能写一条 @updateURL，写多行也只有一条生效。
        走 ghfast 加速直取 raw：不缓存，拉到的永远是 main 最新内容；
        jsDelivr 的 @main 有 12 小时缓存，实测 purge 后仍会返回旧版，所以只当最后的兜底。 */
-    const SELF_VERSION = (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "1.1.6";
+    const SELF_VERSION = (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "1.1.7";
     const UPDATE_MIRRORS = [
         "https://ghfast.top/https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js",  // 主更新地址：加速直取 raw，不缓存
         "https://raw.githubusercontent.com/ZzicoChen/Steam-SD/main/Steam-SD.js",   // 原地址：GitHub raw 源头
