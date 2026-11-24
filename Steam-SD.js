@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Steam游戏历史最低价格
 // @namespace    https://github.com/beerleexc
-// @version      1.3.0
+// @version      1.3.1
 // @description  在 Steam 游戏商店页每个「购买」区块内、愿望单列表每一行，显示历史最低价与当前最低价（Steam 渠道），自动跳过下载 Demo、请求访问权限等区块
 // @author       beerlee
 // @license      MIT
@@ -296,7 +296,7 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
     }
 
     /* 没有数据的那一行也给个占位，保证「历史最低价 / 当前最低价」两行始终都在 */
-    function makeEmptyRow(label) {
+    function makeEmptyRow(label, text) {
         const row = document.createElement("div");
         row.className = "shc-row";
         const a = document.createElement("span");
@@ -304,7 +304,7 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
         a.textContent = label;
         const b = document.createElement("span");
         b.className = "shc-none";
-        b.textContent = "暂无记录";
+        b.textContent = text || "暂无记录";
         row.append(a, b);
         return row;
     }
@@ -351,6 +351,9 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
         if (data.low) {
             box.appendChild(makeRow("历史最低价是 ", data.low.date, data.low.cut,
                 formatPrice(data.low.amount, data.low.currency)));
+        } else if (data.pending) {
+            /* 数据还没回来：史低那行写「读取中…」，不拿当前价冒充，避免数字先假后真来回跳 */
+            box.appendChild(makeEmptyRow("历史最低价是 ", "读取中…"));
         } else if (data.current && data.current.cut > 0) {
             /* 当前就在打折、且查不到更低价记录 → 当前价即史低 */
             box.appendChild(makeFallbackLowRow("历史最低价是 ", data.current));
@@ -413,7 +416,7 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
             /* 未命中 → 先用页面自身的价格立刻画出两行，网络回来后补齐史低 */
             const quick = {};
             targets.forEach(t => {
-                quick[t.key] = { low: null, current: parseCurrentFromBlock(t.block) };
+                quick[t.key] = { low: null, current: parseCurrentFromBlock(t.block), pending: true };
             });
             targets.forEach(t => paintTarget(t, quick[t.key]));
 
@@ -503,18 +506,57 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
         return span;
     }
 
+    const PRICE_RE = /(HK\$|NT\$|R\$|¥|￥|\$|€|£|₽|₩|₹)\s*([\d][\d.,]*)/g;
+
+    function priceNumber(text) {
+        return /,\d{2}$/.test(text) ? Number(text.replace(".", "").replace(",", ".")) : Number(text.replace(/,/g, ""));
+    }
+
+    /* 读价格格文本时跳过脚本自己插进去的块，避免把上次显示的数字又读回来 */
+    function priceTextExcludingBox(scope) {
+        let out = "";
+        const walk = node => {
+            node.childNodes.forEach(n => {
+                if (n.nodeType === 3) out += n.nodeValue;
+                else if (n.nodeType === 1 && !n.classList.contains("shc-wl-info")) walk(n);
+            });
+        };
+        walk(scope);
+        return out;
+    }
+
     /* 愿望单行内价格直接读 DOM（不打请求），只把拿不到的部分交给接口 */
     function wishlistRowPrice(row) {
         const cell = wishlistPriceCell(row);
         const scope = cell || row;
-        const text = String(scope.innerText || scope.textContent || "");
-        const m = text.match(/(HK\$|NT\$|R\$|¥|￥|\$|€|£|₽|₩|₹)\s*([\d][\d.,]*)/);
-        if (!m) return null;
-        const numText = /,\d{2}$/.test(m[2]) ? m[2].replace(".", "").replace(",", ".") : m[2].replace(/,/g, "");
-        const amount = Number(numText);
+
+        /* Steam 自带 aria-label：「立省 10%。原价为 ¥77.00，折后为 ¥69.30。」——折后价才是当前价 */
+        const labeled = scope.querySelector('[aria-label*="折后"]');
+        if (labeled) {
+            const label = labeled.getAttribute("aria-label") || "";
+            const m = label.match(/折后为\s*(HK\$|NT\$|R\$|¥|￥|\$|€|£|₽|₩|₹)\s*([\d][\d.,]*)/) ||
+                label.match(/(HK\$|NT\$|R\$|¥|￥|\$|€|£|₽|₩|₹)\s*([\d][\d.,]*)/);
+            if (m) {
+                const amount = priceNumber(m[2]);
+                const pct = label.match(/立省\s*(\d+)%/);
+                if (amount > 0) {
+                    return { amount: amount, currency: SYM_TO_CUR[m[1]] || "CNY", cut: pct ? Number(pct[1]) : 0 };
+                }
+            }
+        }
+
+        /* 兜底：有折扣的是「原价 折后价」两个数字，取最后一个；只有一个就直接用 */
+        const text = priceTextExcludingBox(scope);
+        const all = [];
+        let m;
+        PRICE_RE.lastIndex = 0;
+        while ((m = PRICE_RE.exec(text))) all.push(m);
+        if (!all.length) return null;
+        const last = all[all.length - 1];
+        const amount = priceNumber(last[2]);
         if (!(amount > 0)) return null;
-        const pct = text.match(/(\d+)\s*%/);
-        return { amount: amount, currency: SYM_TO_CUR[m[1]] || "CNY", cut: pct ? Number(pct[1]) : 0 };
+        const pct = text.match(/[-–]\s*(\d+)\s*%/) || text.match(/(\d+)\s*%/);
+        return { amount: amount, currency: SYM_TO_CUR[last[1]] || "CNY", cut: pct ? Number(pct[1]) : 0 };
     }
 
     async function fetchWishlistData(appIds, seed) {
@@ -583,6 +625,13 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
             line.appendChild(textSpan("shc-wl-label", "史低: "));
             line.appendChild(textSpan("shc-wl-price", formatPrice(data.low.amount, data.low.currency)));
             if (data.low.cut > 0) line.appendChild(textSpan("shc-wl-cut", "-" + data.low.cut + "%"));
+            box.appendChild(line);
+        } else if (data.pending) {
+            /* 史低还没取到：写「读取中…」，不拿当前价冒充 */
+            const line = document.createElement("span");
+            line.className = "shc-wl-row";
+            line.appendChild(textSpan("shc-wl-label", "史低: "));
+            line.appendChild(textSpan("shc-wl-none", "读取中…"));
             box.appendChild(line);
         } else if (data.current && data.current.cut > 0) {
             /* 当前就在打折、查不到更低价记录 → 用当前价顶替史低 */
@@ -668,7 +717,7 @@ padding:0 4px;margin:0 2px;border-radius:2px;font-size:12.5px;line-height:1.55}
             /* 先把页面自带的现价画上去，接口回来再补齐史低 */
             rows.forEach(row => {
                 const id = wishlistRowAppId(row);
-                if (id && seed[id]) paintWishlistRow(row, { low: null, current: seed[id] });
+                if (id && seed[id]) paintWishlistRow(row, { low: null, current: seed[id], pending: true });
             });
 
             const data = await fetchWishlistData(ids, seed);
